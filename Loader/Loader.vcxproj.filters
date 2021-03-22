@@ -11,7 +11,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Loader.cpp">
+    <ClCompile Include="Dll.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

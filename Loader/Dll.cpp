@@ -53,7 +53,6 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
         &cbData,
         0)))
     {
-        ;
         goto Cleanup;
     }
 
@@ -73,14 +72,12 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
         &cbData,
         0)))
     {
-        ;
         goto Cleanup;
     }
 
     // Determine whether the cbBlockLen is not longer than the IV length.
     if (cbBlockLen > sizeof(rgbIV))
     {
-        ;
         goto Cleanup;
     }
 

