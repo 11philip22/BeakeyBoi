@@ -19,5 +19,8 @@
     <ClInclude Include="Dll.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Payload.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

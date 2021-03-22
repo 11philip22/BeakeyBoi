@@ -5,21 +5,11 @@ VisualStudioVersion = 16.0.30711.63
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BeakeyBoi", "BeakeyBoi\BeakeyBoi.vcxproj", "{111C024A-8469-40EE-8E6E-AD2157512EFC}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Crypto++", "Crypto++\Crypto++.vcxitems", "{B231163D-8800-409E-B26C-98C8F1BA4580}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Loader", "Loader\Loader.vcxproj", "{E6B9742F-D5BA-4725-86F6-DA50A444EFEB}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "LoaderTest", "LoaderTest\LoaderTest.vcxproj", "{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "LoaderTestNative", "LoaderTestNative\LoaderTestNative.vcxproj", "{FACEA589-2F8B-434D-B871-4437D44C065B}"
 EndProject
 Global
-	GlobalSection(SharedMSBuildProjectFiles) = preSolution
-		Crypto++\Crypto++.vcxitems*{111c024a-8469-40ee-8e6e-ad2157512efc}*SharedItemsImports = 4
-		Crypto++\Crypto++.vcxitems*{223241a6-68ae-41e9-9c23-5a5c95d5f6e9}*SharedItemsImports = 4
-		Crypto++\Crypto++.vcxitems*{b231163d-8800-409e-b26c-98c8f1ba4580}*SharedItemsImports = 9
-		Crypto++\Crypto++.vcxitems*{e6b9742f-d5ba-4725-86f6-da50a444efeb}*SharedItemsImports = 4
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
@@ -43,14 +33,6 @@ Global
 		{E6B9742F-D5BA-4725-86F6-DA50A444EFEB}.Release|x64.Build.0 = Release|x64
 		{E6B9742F-D5BA-4725-86F6-DA50A444EFEB}.Release|x86.ActiveCfg = Release|Win32
 		{E6B9742F-D5BA-4725-86F6-DA50A444EFEB}.Release|x86.Build.0 = Release|Win32
-		{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}.Debug|x64.ActiveCfg = Debug|x64
-		{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}.Debug|x64.Build.0 = Debug|x64
-		{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}.Debug|x86.ActiveCfg = Debug|Win32
-		{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}.Debug|x86.Build.0 = Debug|Win32
-		{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}.Release|x64.ActiveCfg = Release|x64
-		{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}.Release|x64.Build.0 = Release|x64
-		{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}.Release|x86.ActiveCfg = Release|Win32
-		{223241A6-68AE-41E9-9C23-5A5C95D5F6E9}.Release|x86.Build.0 = Release|Win32
 		{FACEA589-2F8B-434D-B871-4437D44C065B}.Debug|x64.ActiveCfg = Debug|x64
 		{FACEA589-2F8B-434D-B871-4437D44C065B}.Debug|x64.Build.0 = Debug|x64
 		{FACEA589-2F8B-434D-B871-4437D44C065B}.Debug|x86.ActiveCfg = Debug|Win32

