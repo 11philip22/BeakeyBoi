@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <winternl.h>
 #include <intrin.h>
+#include <bcrypt.h>
 
 #define SRDI_CLEARHEADER 0x1
 #define SRDI_CLEARMEMORY 0x2
@@ -69,6 +70,14 @@ typedef BOOLEAN(WINAPI* RTLADDFUNCTIONTABLE)(PVOID, DWORD, DWORD64);
 
 typedef NTSTATUS(WINAPI *LDRLOADDLL)(PWCHAR, ULONG, PUNICODE_STRING, PHANDLE);
 typedef NTSTATUS(WINAPI *LDRGETPROCADDRESS)(HMODULE, PANSI_STRING, WORD, PVOID*);
+
+typedef NTSTATUS(WINAPI* BCRYPTOPENALGORITHMPROVIDER)(BCRYPT_ALG_HANDLE*, LPCWSTR, LPCWSTR, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTGETPROPERTY)(BCRYPT_HANDLE, LPCWSTR, PUCHAR, ULONG, ULONG*, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTSETPROPERTY)(BCRYPT_HANDLE, LPCWSTR, PUCHAR, ULONG, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTGENERATESYMMETRICKEY)(BCRYPT_ALG_HANDLE, BCRYPT_KEY_HANDLE*, PUCHAR, ULONG, PUCHAR, ULONG, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTDECRYPT)(BCRYPT_KEY_HANDLE, PUCHAR, ULONG, VOID*, PUCHAR, ULONG, PUCHAR, ULONG, ULONG*, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTCLOSEALGORITHMPROVIDER)(BCRYPT_ALG_HANDLE, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTDESTROYKEY)(BCRYPT_KEY_HANDLE);
 
 #pragma warning( push )
 #pragma warning( disable : 4214 ) // nonstandard extension
@@ -134,6 +143,14 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	SLEEP pSleep = NULL;
 	RTLADDFUNCTIONTABLE pRtlAddFunctionTable = NULL;
 
+	BCRYPTOPENALGORITHMPROVIDER pBCryptOpenAlgorithmProvider = NULL;
+	BCRYPTGETPROPERTY pBCryptGetProperty = NULL;
+	BCRYPTSETPROPERTY pBCryptSetProperty = NULL;
+	BCRYPTGENERATESYMMETRICKEY pBCryptGenerateSymmetricKey = NULL;
+	BCRYPTDECRYPT pBCryptDecrypt = NULL;
+	BCRYPTCLOSEALGORITHMPROVIDER pBCryptCloseAlgorithmProvider = NULL;
+	BCRYPTDESTROYKEY pBCryptDestroyKey = NULL;
+
 	//CHAR msg[2] = { 'a','\0' };
 	//MESSAGEBOXA pMessageBoxA = NULL;
 
@@ -177,12 +194,15 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	DWORD funcHash;
 	DWORD importCount;
 	HANDLE library;
+	HANDLE cryptLib;
 
 	// String
 	UNICODE_STRING uString = { 0 };
+	UNICODE_STRING uCryptString = { 0 };
 	STRING aString = { 0 };
 	
 	WCHAR sKernel32[] = { 'k', 'e', 'r', 'n', 'e', 'l', '3', '2', '.', 'd', 'l', 'l'};
+	WCHAR sBcrypt[] = { 'B', 'c', 'r', 'y', 'p', 't', '.', 'd', 'l', 'l' };
 
 	// At a certain length (15ish), the compiler with screw with inline
 	// strings declared as CHAR. No idea why, use BYTE to get around it.
@@ -195,6 +215,14 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	BYTE sGetNativeSystemInfo[] = { 'G', 'e', 't', 'N', 'a', 't', 'i', 'v', 'e', 'S', 'y', 's', 't', 'e', 'm', 'I', 'n', 'f', 'o' };
 	BYTE sRtlAddFunctionTable[] = { 'R', 't', 'l', 'A', 'd', 'd', 'F', 'u', 'n', 'c', 't', 'i', 'o', 'n', 'T', 'a', 'b', 'l', 'e' };
 
+	BYTE sBCryptOpenAlgorithmProvider[] = { 'B', 'C', 'r', 'y', 'p', 't', 'O', 'p', 'e', 'n', 'A', 'l', 'g', 'o', 'r', 'i', 't', 'h', 'm', 'P', 'r', 'o', 'v', 'i', 'd', 'e', 'r' };
+	BYTE sBCryptGetProperty[] = { 'B', 'C', 'r', 'y', 'p', 't', 'G', 'e', 't', 'P', 'r', 'o', 'p', 'e', 'r', 't', 'y' };
+	BYTE sBCryptSetProperty[] = { 'B', 'C', 'r', 'y', 'p', 't', 'S', 'e', 't', 'P', 'r', 'o', 'p', 'e', 'r', 't', 'y' };
+	BYTE sBCryptGenerateSymmetricKey[] = { 'B', 'C', 'r', 'y', 'p', 't', 'G', 'e', 'n', 'e', 'r', 'a', 't', 'e', 'S', 'y', 'm', 'm', 'e', 't', 'r', 'i', 'c', 'K', 'e', 'y' };
+	BYTE sBCryptDecrypt[] = { 'B', 'C', 'r', 'y', 'p', 't', 'D', 'e', 'c', 'r', 'y', 'p', 't' };
+	BYTE sBCryptCloseAlgorithmProvider[] = { 'B', 'C', 'r', 'y', 'p', 't', 'C', 'l', 'o', 's', 'e', 'A', 'l', 'g', 'o', 'r', 'i', 't', 'h', 'm', 'P', 'r', 'o', 'v', 'i', 'd', 'e', 'r' };
+	BYTE sBCryptDestroyKey[] = { 'B', 'C', 'r', 'y', 'p', 't', 'D', 'e', 's', 't', 'r', 'o', 'y', 'K', 'e', 'y' };
+	
 	// Import obfuscation
 	DWORD randSeed;
 	DWORD rand;
@@ -217,6 +245,10 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	uString.Buffer = sKernel32;
 	uString.MaximumLength = sizeof(sKernel32);
 	uString.Length = sizeof(sKernel32);
+
+	uCryptString.Buffer = sBcrypt;
+	uCryptString.MaximumLength = sizeof(sBcrypt);
+	uCryptString.Length = sizeof(sBcrypt);
 
 	//pMessageBoxA = (MESSAGEBOXA)GetProcAddressWithHash(MESSAGEBOXA_HASH);
 
@@ -248,6 +280,34 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 
 	if (!pVirtualAlloc || !pVirtualProtect || !pSleep ||
 		!pFlushInstructionCache || !pGetNativeSystemInfo) {
+		return 0;
+	}
+
+	pLdrLoadDll(NULL, 0, &uCryptString, &cryptLib);
+
+	FILL_STRING_WITH_BUF(aString, sBCryptOpenAlgorithmProvider);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptOpenAlgorithmProvider);
+
+	FILL_STRING_WITH_BUF(aString, sBCryptGetProperty);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptGetProperty);
+
+	FILL_STRING_WITH_BUF(aString, sBCryptSetProperty);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptSetProperty);
+
+	FILL_STRING_WITH_BUF(aString, sBCryptGenerateSymmetricKey);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptGenerateSymmetricKey);
+
+	FILL_STRING_WITH_BUF(aString, sBCryptDecrypt);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptDecrypt);
+
+	FILL_STRING_WITH_BUF(aString, sBCryptCloseAlgorithmProvider);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptCloseAlgorithmProvider);
+
+	FILL_STRING_WITH_BUF(aString, sBCryptDestroyKey);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptDestroyKey);
+
+	if (!pBCryptOpenAlgorithmProvider || !pBCryptGetProperty || !pBCryptSetProperty || !pBCryptGenerateSymmetricKey || 
+		!pBCryptDecrypt || !pBCryptCloseAlgorithmProvider || !pBCryptDestroyKey) {
 		return 0;
 	}
 	
