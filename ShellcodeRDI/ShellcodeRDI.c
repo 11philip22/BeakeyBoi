@@ -39,7 +39,6 @@
 
 #define LDRLOADDLL_HASH					0xbdbf9c13
 #define LDRGETPROCADDRESS_HASH			0x5ed941b5
-
 #define BCRYPTDESTROYKEYHASH			0x0D11B053
 
 
@@ -54,24 +53,24 @@
 // 100-ns period
 #define OBFUSCATE_IMPORT_DELAY 5 * 1000 * 10000
 
-typedef BOOL(WINAPI * DLLMAIN)(HINSTANCE, DWORD, LPVOID);
+typedef BOOL(WINAPI* DLLMAIN)(HINSTANCE, DWORD, LPVOID);
 typedef BOOL(*EXPORTFUNC)(LPVOID, DWORD);
 
-typedef HMODULE(WINAPI * LOADLIBRARYA)(LPCSTR);
-typedef ULONG_PTR(WINAPI * GETPROCADDRESS)(HMODULE, LPCSTR);
-typedef LPVOID(WINAPI * VIRTUALALLOC)(LPVOID, SIZE_T, DWORD, DWORD);
-typedef VOID(WINAPI * EXITTHREAD)(DWORD);
-typedef BOOL(NTAPI  * FLUSHINSTRUCTIONCACHE)(HANDLE, LPCVOID, SIZE_T);
-typedef VOID(WINAPI * GETNATIVESYSTEMINFO)(LPSYSTEM_INFO);
-typedef BOOL(WINAPI * VIRTUALPROTECT)(LPVOID, SIZE_T, DWORD, PDWORD);
-typedef int (WINAPI * MESSAGEBOXA)(HWND, LPSTR, LPSTR, UINT);
-typedef BOOL(WINAPI * VIRTUALFREE)(LPVOID, SIZE_T, DWORD);
-typedef BOOL(WINAPI * LOCALFREE)(LPVOID);
+typedef HMODULE(WINAPI* LOADLIBRARYA)(LPCSTR);
+typedef ULONG_PTR(WINAPI* GETPROCADDRESS)(HMODULE, LPCSTR);
+typedef LPVOID(WINAPI* VIRTUALALLOC)(LPVOID, SIZE_T, DWORD, DWORD);
+typedef VOID(WINAPI* EXITTHREAD)(DWORD);
+typedef BOOL(NTAPI* FLUSHINSTRUCTIONCACHE)(HANDLE, LPCVOID, SIZE_T);
+typedef VOID(WINAPI* GETNATIVESYSTEMINFO)(LPSYSTEM_INFO);
+typedef BOOL(WINAPI* VIRTUALPROTECT)(LPVOID, SIZE_T, DWORD, PDWORD);
+typedef int (WINAPI* MESSAGEBOXA)(HWND, LPSTR, LPSTR, UINT);
+typedef BOOL(WINAPI* VIRTUALFREE)(LPVOID, SIZE_T, DWORD);
+typedef BOOL(WINAPI* LOCALFREE)(LPVOID);
 typedef VOID(WINAPI* SLEEP)(DWORD);
 typedef BOOLEAN(WINAPI* RTLADDFUNCTIONTABLE)(PVOID, DWORD, DWORD64);
 
-typedef NTSTATUS(WINAPI *LDRLOADDLL)(PWCHAR, ULONG, PUNICODE_STRING, PHANDLE);
-typedef NTSTATUS(WINAPI *LDRGETPROCADDRESS)(HMODULE, PANSI_STRING, WORD, PVOID*);
+typedef NTSTATUS(WINAPI* LDRLOADDLL)(PWCHAR, ULONG, PUNICODE_STRING, PHANDLE);
+typedef NTSTATUS(WINAPI* LDRGETPROCADDRESS)(HMODULE, PANSI_STRING, WORD, PVOID*);
 
 typedef NTSTATUS(WINAPI* BCRYPTOPENALGORITHMPROVIDER)(BCRYPT_ALG_HANDLE*, LPCWSTR, LPCWSTR, ULONG);
 typedef NTSTATUS(WINAPI* BCRYPTGETPROPERTY)(BCRYPT_HANDLE, LPCWSTR, PUCHAR, ULONG, ULONG*, ULONG);
@@ -127,8 +126,8 @@ _wcslen(wchar_t* s) {
 
 ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD nUserdataLen, DWORD flags)
 {
-	#pragma warning( push )
-	#pragma warning( disable : 4055 ) // Ignore cast warnings
+#pragma warning( push )
+#pragma warning( disable : 4055 ) // Ignore cast warnings
 
 	// Function pointers
 
@@ -165,7 +164,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	PIMAGE_THUNK_DATA firstThunk, origFirstThunk;
 	PIMAGE_IMPORT_BY_NAME importByName;
 	PIMAGE_TLS_DIRECTORY tlsDir;
-	PIMAGE_TLS_CALLBACK * callback;
+	PIMAGE_TLS_CALLBACK* callback;
 	PIMAGE_BASE_RELOCATION relocation;
 	PIMAGE_RELOC relocList;
 	PIMAGE_EXPORT_DIRECTORY exportDir;
@@ -200,10 +199,9 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 
 	// String
 	UNICODE_STRING uString = { 0 };
-	UNICODE_STRING uCryptString = { 0 };
 	STRING aString = { 0 };
-	
-	WCHAR sKernel32[] = { 'k', 'e', 'r', 'n', 'e', 'l', '3', '2', '.', 'd', 'l', 'l'};
+
+	WCHAR sKernel32[] = { 'k', 'e', 'r', 'n', 'e', 'l', '3', '2', '.', 'd', 'l', 'l' };
 	WCHAR sBcrypt[] = { 'B', 'c', 'r', 'y', 'p', 't', '.', 'd', 'l', 'l' };
 
 	// At a certain length (15ish), the compiler with screw with inline
@@ -216,7 +214,6 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	BYTE sFlushInstructionCache[] = { 'F', 'l', 'u', 's', 'h', 'I', 'n', 's', 't', 'r', 'u', 'c', 't', 'i', 'o', 'n', 'C', 'a', 'c', 'h', 'e' };
 	BYTE sGetNativeSystemInfo[] = { 'G', 'e', 't', 'N', 'a', 't', 'i', 'v', 'e', 'S', 'y', 's', 't', 'e', 'm', 'I', 'n', 'f', 'o' };
 	BYTE sRtlAddFunctionTable[] = { 'R', 't', 'l', 'A', 'd', 'd', 'F', 'u', 'n', 'c', 't', 'i', 'o', 'n', 'T', 'a', 'b', 'l', 'e' };
-	//BYTE sMessageBoxA[] = { 'M', 'e', 's', 's', 'a', 'g', 'e', 'B', 'o', 'x', 'A'};
 
 	BYTE sBCryptOpenAlgorithmProvider[] = { 'B', 'C', 'r', 'y', 'p', 't', 'O', 'p', 'e', 'n', 'A', 'l', 'g', 'o', 'r', 'i', 't', 'h', 'm', 'P', 'r', 'o', 'v', 'i', 'd', 'e', 'r' };
 	BYTE sBCryptGetProperty[] = { 'B', 'C', 'r', 'y', 'p', 't', 'G', 'e', 't', 'P', 'r', 'o', 'p', 'e', 'r', 't', 'y' };
@@ -225,7 +222,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	BYTE sBCryptDecrypt[] = { 'B', 'C', 'r', 'y', 'p', 't', 'D', 'e', 'c', 'r', 'y', 'p', 't' };
 	BYTE sBCryptCloseAlgorithmProvider[] = { 'B', 'C', 'r', 'y', 'p', 't', 'C', 'l', 'o', 's', 'e', 'A', 'l', 'g', 'o', 'r', 'i', 't', 'h', 'm', 'P', 'r', 'o', 'v', 'i', 'd', 'e', 'r' };
 	BYTE sBCryptDestroyKey[] = { 'B', 'C', 'r', 'y', 'p', 't', 'D', 'e', 's', 't', 'r', 'o', 'y', 'K', 'e', 'y' };
-	
+
 	// Import obfuscation
 	DWORD randSeed;
 	DWORD rand;
@@ -248,10 +245,6 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	uString.Buffer = sKernel32;
 	uString.MaximumLength = sizeof(sKernel32);
 	uString.Length = sizeof(sKernel32);
-
-	uCryptString.Buffer = sBcrypt;
-	uCryptString.MaximumLength = sizeof(sBcrypt);
-	uCryptString.Length = sizeof(sBcrypt);
 
 	//pMessageBoxA = (MESSAGEBOXA)GetProcAddressWithHash(MESSAGEBOXA_HASH);
 
@@ -278,7 +271,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	FILL_STRING_WITH_BUF(aString, sLoadLibrary);
 	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pLoadLibraryA);
 
-	//FILL_STRING_WITH_BUF(aString, sMessageBoxA);
+	//FILL_STRING_WITH_BUF(aString, sMessageBox);
 	//pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pMessageBoxA);
 
 	if (!pVirtualAlloc || !pVirtualProtect || !pSleep ||
@@ -286,7 +279,11 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 		return 0;
 	}
 
-	pLdrLoadDll(NULL, 0, &uCryptString, &cryptLib);
+	uString.Buffer = sBcrypt;
+	uString.MaximumLength = sizeof(sBcrypt);
+	uString.Length = sizeof(sBcrypt);
+	
+	pLdrLoadDll(NULL, 0, &uString, &cryptLib);
 
 	FILL_STRING_WITH_BUF(aString, sBCryptOpenAlgorithmProvider);
 	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptOpenAlgorithmProvider);
@@ -306,19 +303,16 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	FILL_STRING_WITH_BUF(aString, sBCryptCloseAlgorithmProvider);
 	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptCloseAlgorithmProvider);
 
-	// WTF
+	//// WTF
 	pBCryptDestroyKey = (BCRYPTDESTROYKEY)GetProcAddressWithHash(BCRYPTDESTROYKEYHASH);
-
 	//FILL_STRING_WITH_BUF(aString, sBCryptDestroyKey);
 	//pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptDestroyKey);
-	// END OF WTF
-	
-	if (!pBCryptOpenAlgorithmProvider || !pBCryptGetProperty || !pBCryptSetProperty || !pBCryptGenerateSymmetricKey || 
+	//// END OF WTF
+
+	if (!pBCryptOpenAlgorithmProvider || !pBCryptGetProperty || !pBCryptSetProperty || !pBCryptGenerateSymmetricKey ||
 		!pBCryptDecrypt || !pBCryptCloseAlgorithmProvider || !pBCryptDestroyKey) {
 		return 0;
 	}
-
-	//pMessageBoxA(NULL, msg, msg, 0x00000001L);
 
 	///
 	// STEP 2: load our image into a new permanent location in memory
@@ -360,7 +354,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	if (alignedImageSize != AlignValueUp(lastSectionEnd, sysInfo.dwPageSize)) {
 		return 0;
 	}
-		
+
 	// Allocate all the memory for the DLL to be loaded into. Attempt to use the preferred base address.
 
 	baseAddress = (ULONG_PTR)pVirtualAlloc(
@@ -386,14 +380,15 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 			((PBYTE)baseAddress)[i] = ((PBYTE)dllData)[i];
 		}
 
-	}else{
+	}
+	else {
 		for (i = 0; i < ntHeaders->OptionalHeader.SizeOfHeaders; i++) {
 			((PBYTE)baseAddress)[i] = ((PBYTE)dllData)[i];
 		}
 	}
 
 	ntHeaders = RVA(PIMAGE_NT_HEADERS, baseAddress, ((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew);
-	
+
 	///
 	// STEP 3: Load in the sections
 	///
@@ -479,7 +474,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 			for (; origFirstThunk->u1.Function; firstThunk++, origFirstThunk++) {
 
 				if (IMAGE_SNAP_BY_ORDINAL(origFirstThunk->u1.Ordinal)) {
-					pLdrGetProcAddress(library, NULL, (WORD)origFirstThunk->u1.Ordinal, (PVOID *)&(firstThunk->u1.Function));
+					pLdrGetProcAddress(library, NULL, (WORD)origFirstThunk->u1.Ordinal, (PVOID*)&(firstThunk->u1.Function));
 				}
 				else {
 					importByName = RVA(PIMAGE_IMPORT_BY_NAME, baseAddress, origFirstThunk->u1.AddressOfData);
@@ -512,18 +507,18 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 
 			for (; firstThunk->u1.Function; firstThunk++, origFirstThunk++) {
 				if (IMAGE_SNAP_BY_ORDINAL(origFirstThunk->u1.Ordinal)) {
-					pLdrGetProcAddress(library, NULL, (WORD)origFirstThunk->u1.Ordinal, (PVOID *)&(firstThunk->u1.Function));
+					pLdrGetProcAddress(library, NULL, (WORD)origFirstThunk->u1.Ordinal, (PVOID*)&(firstThunk->u1.Function));
 				}
 				else {
 					importByName = RVA(PIMAGE_IMPORT_BY_NAME, baseAddress, origFirstThunk->u1.AddressOfData);
 					FILL_STRING(aString, importByName->Name);
-					pLdrGetProcAddress(library, &aString, 0, (PVOID *)&(firstThunk->u1.Function));
+					pLdrGetProcAddress(library, &aString, 0, (PVOID*)&(firstThunk->u1.Function));
 				}
 			}
 		}
 	}
 
-	
+
 	///
 	// STEP 7: Finalize our sections. Set memory protections.
 	///
@@ -582,8 +577,8 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	if (dataDir->Size)
 	{
 		tlsDir = RVA(PIMAGE_TLS_DIRECTORY, baseAddress, dataDir->VirtualAddress);
-		callback = (PIMAGE_TLS_CALLBACK *)(tlsDir->AddressOfCallBacks);
-		
+		callback = (PIMAGE_TLS_CALLBACK*)(tlsDir->AddressOfCallBacks);
+
 		for (; *callback; callback++) {
 			(*callback)((LPVOID)baseAddress, DLL_PROCESS_ATTACH, NULL);
 		}
@@ -615,7 +610,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	///
 
 	if (dwFunctionHash) {
-		
+
 		do
 		{
 			dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
@@ -640,7 +635,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 				for (; *expNameStr; expNameStr++) {
 					funcHash += *expNameStr;
 					funcHash = ROTR32(funcHash, 13);
-					
+
 				}
 
 				if (dwFunctionHash == funcHash && expOrdinal)
@@ -657,7 +652,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 		if (!pVirtualFree((LPVOID)dllData, 0, 0x8000))
 			pLocalFree((LPVOID)dllData);
 	}
-	 
+
 	// Atempt to return a handle to the module
 	return baseAddress;
 }
