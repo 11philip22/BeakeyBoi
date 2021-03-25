@@ -503,9 +503,11 @@ void main()
 		goto Cleanup;
 	}
 
+	// Copy key and iv to creds buffer
 	std::copy_n(rgbAES128Key, 16, creds);
 	std::copy_n(rgbIV, 16, creds + 16);
 
+	// Append creds to cipher text
 	memcpy(&pbCipherText[cbCipherText], creds, sizeof(creds));
 
 	if (rawData[0] == 'M' && rawData[1] == 'Z') {
