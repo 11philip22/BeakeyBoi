@@ -1,5 +1,7 @@
 // RDIShellcodeCLoader.cpp : Defines the entry point for the console application.
 //
+// ReSharper disable CppClangTidyHicppAvoidGoto
+// ReSharper disable CppClangTidyCppcoreguidelinesAvoidGoto
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <Windows.h>
@@ -7,7 +9,7 @@
 #include <functional>
 
 #include "Dll.h"
-#include "payload.h"
+#include "Payload.h"
 
 #pragma comment(lib, "Bcrypt.lib")
 
