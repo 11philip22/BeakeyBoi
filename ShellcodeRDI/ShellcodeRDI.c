@@ -373,18 +373,10 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 
 	// Copy over the headers
 
-	if (flags & SRDI_CLEARHEADER) {
-		((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew = ((PIMAGE_DOS_HEADER)dllData)->e_lfanew;
+	((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew = ((PIMAGE_DOS_HEADER)dllData)->e_lfanew;
 
-		for (i = ((PIMAGE_DOS_HEADER)dllData)->e_lfanew; i < ntHeaders->OptionalHeader.SizeOfHeaders; i++) {
-			((PBYTE)baseAddress)[i] = ((PBYTE)dllData)[i];
-		}
-
-	}
-	else {
-		for (i = 0; i < ntHeaders->OptionalHeader.SizeOfHeaders; i++) {
-			((PBYTE)baseAddress)[i] = ((PBYTE)dllData)[i];
-		}
+	for (i = ((PIMAGE_DOS_HEADER)dllData)->e_lfanew; i < ntHeaders->OptionalHeader.SizeOfHeaders; i++) {
+		((PBYTE)baseAddress)[i] = ((PBYTE)dllData)[i];
 	}
 
 	ntHeaders = RVA(PIMAGE_NT_HEADERS, baseAddress, ((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew);
@@ -448,8 +440,8 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 		}
 
 		importDesc = RVA(PIMAGE_IMPORT_DESCRIPTOR, baseAddress, dataDir->VirtualAddress);
-		if (flags & SRDI_OBFUSCATEIMPORTS && importCount > 1) {
-			sleep = (flags & 0xFFFF0000);
+		if (importCount > 1) {
+			sleep = (4096);
 			sleep = sleep >> 16;
 
 			for (i = 0; i < importCount - 1; i++) {
@@ -483,7 +475,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 				}
 			}
 
-			if (flags & SRDI_OBFUSCATEIMPORTS && importCount > 1) {
+			if (importCount > 1) {
 				pSleep(sleep * 1000);
 			}
 		}
