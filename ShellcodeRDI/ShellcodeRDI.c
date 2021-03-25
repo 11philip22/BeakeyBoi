@@ -640,10 +640,10 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 		} while (0);
 	}
 
-	//if (pVirtualFree && pLocalFree) {
-	//	if (!pVirtualFree((LPVOID)dllData, 0, 0x8000))
-	//		pLocalFree((LPVOID)dllData);
-	//}
+	if (pVirtualFree && pLocalFree) {
+		if (!pVirtualFree((LPVOID)dllData, 0, 0x8000))
+			pLocalFree((LPVOID)dllData);
+	}
 
 	// Atempt to return a handle to the module
 	return baseAddress;
