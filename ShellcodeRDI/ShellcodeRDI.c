@@ -300,10 +300,10 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	//FILL_STRING_WITH_BUF(aString, sMessageBox);
 	//pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pMessageBoxA);
 
-	//FILL_STRING_WITH_BUF(aString, sCopyMemory);
-	//pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pCopyMemory);
+	FILL_STRING_WITH_BUF(aString, sCopyMemory);
+	status = pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pCopyMemory);
 	//pCopyMemory = (COPYMEMORY)GetProcAddressWithHash(COPYMEMORYHASH);
-
+	
 	if (!pVirtualAlloc || !pVirtualProtect || !pSleep || /*!pCopyMemory ||*/
 		!pFlushInstructionCache || !pGetNativeSystemInfo) {
 		return 0;
