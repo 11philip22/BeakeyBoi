@@ -403,8 +403,8 @@ void main()
 	LPSTR					finalShellcode = nullptr;
 	DWORD					dwOldProtect1 = 0;
 	SYSTEM_INFO				sysInfo;
-	BCRYPT_ALG_HANDLE       hAesAlg = NULL;
-	BCRYPT_KEY_HANDLE       hKey = NULL;
+	BCRYPT_ALG_HANDLE       hAesAlg = nullptr;
+	BCRYPT_KEY_HANDLE       hKey = nullptr;
 	NTSTATUS                status = STATUS_UNSUCCESSFUL;
 	DWORD                   cbCipherPayload = 0,
 							cbRawPayload = 0,
@@ -414,12 +414,12 @@ void main()
 							cbKeyObject = 0,
 							cbBlockLen = 0,
 							finalSize;
-	PBYTE					pbCipherDll = NULL,
-							pbRawDll = NULL,
-							pbCipherPayload = NULL,
-							pbRawPayload = NULL,
-							pbKeyObject = NULL,
-							pbIV = NULL;
+	PBYTE					pbCipherDll = nullptr,
+							pbRawDll = nullptr,
+							pbCipherPayload = nullptr,
+							pbRawPayload = nullptr,
+							pbKeyObject = nullptr,
+							pbIV = nullptr;
 	BYTE                    creds[32] = {},
 							dllCreds[32] = {},
 							rgbDllIV[16] = {},
@@ -432,15 +432,15 @@ void main()
 #ifdef _DEBUG
 	BYTE rgbTestAES128Key[16] = {};
 	BYTE rgbTestIV[16] = {};
-	BCRYPT_HANDLE hTestAesAlg = NULL;
+	BCRYPT_HANDLE hTestAesAlg = nullptr;
 	DWORD cbTestData = 0;
-	PBYTE pbTestKeyObject = NULL;
+	PBYTE pbTestKeyObject = nullptr;
 	DWORD cbTestBlockLen = 0;
-	PBYTE pbTestIV = NULL;
-	BCRYPT_KEY_HANDLE hTestKey = NULL;
+	PBYTE pbTestIV = nullptr;
+	BCRYPT_KEY_HANDLE hTestKey = nullptr;
 	DWORD cbTestKeyObject = 0;
 	DWORD cbTestRawData = 0;
-	PBYTE pbTestRawData = NULL;
+	PBYTE pbTestRawData = nullptr;
 #endif
 
 	GenerateRandomBytes(rgbDllAES128Key, sizeof(rgbDllAES128Key));
@@ -478,7 +478,7 @@ void main()
 
 	// Allocate the key object on the heap.
 	pbKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
-	if (NULL == pbKeyObject)
+	if (nullptr == pbKeyObject)
 	{
 		wprintf(L"[!] memory allocation failed\n");
 		goto Cleanup;
@@ -507,7 +507,7 @@ void main()
 	// Allocate a buffer for the IV. The buffer is consumed during the 
 	// encrypt/decrypt process.
 	pbIV = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbBlockLen);
-	if (NULL == pbIV)
+	if (nullptr == pbIV)
 	{
 		wprintf(L"[!] memory allocation failed\n");
 		goto Cleanup;
@@ -542,7 +542,7 @@ void main()
 
 	cbRawPayload = sizeof(rgbRawPayload);
 	pbRawPayload = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbRawPayload);
-	if (NULL == pbRawPayload)
+	if (nullptr == pbRawPayload)
 	{
 		wprintf(L"[!] memory allocation failed\n");
 		goto Cleanup;
@@ -570,7 +570,7 @@ void main()
 	}
 
 	pbCipherPayload = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCipherPayload + 32);
-	if (NULL == pbCipherPayload)
+	if (nullptr == pbCipherPayload)
 	{
 		wprintf(L"[!] memory allocation failed\n");
 		goto Cleanup;
@@ -619,9 +619,9 @@ void main()
 	cbData = 0;
 	cbKeyObject = 0;
 	cbBlockLen = 0;
-	pbKeyObject = NULL;
-	pbIV = NULL;
-	hKey = NULL;
+	pbKeyObject = nullptr;
+	pbIV = nullptr;
+	hKey = nullptr;
 	
 	// Calculate the size of the buffer to hold the KeyObject.
 	if (!NT_SUCCESS(status = BCryptGetProperty(
@@ -638,7 +638,7 @@ void main()
 
 	// Allocate the key object on the heap.
 	pbKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbKeyObject);
-	if (NULL == pbKeyObject)
+	if (nullptr == pbKeyObject)
 	{
 		wprintf(L"[!] memory allocation failed\n");
 		goto Cleanup;
@@ -667,7 +667,7 @@ void main()
 	// Allocate a buffer for the IV. The buffer is consumed during the 
 	// encrypt/decrypt process.
 	pbIV = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbBlockLen);
-	if (NULL == pbIV)
+	if (nullptr == pbIV)
 	{
 		wprintf(L"[!] memory allocation failed\n");
 		goto Cleanup;
@@ -702,7 +702,7 @@ void main()
 
 	cbRawDll = sizeof(rgbRawDll);
 	pbRawDll = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbRawDll);
-	if (NULL == pbRawDll)
+	if (nullptr == pbRawDll)
 	{
 		wprintf(L"[!] memory allocation failed\n");
 		goto Cleanup;
@@ -730,7 +730,7 @@ void main()
 	}
 
 	pbCipherDll = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbCipherDll + 32);
-	if (NULL == pbCipherDll)
+	if (nullptr == pbCipherDll)
 	{
 		wprintf(L"[!] memory allocation failed\n");
 		goto Cleanup;
@@ -795,7 +795,7 @@ void main()
 	BCryptOpenAlgorithmProvider(
 		&hTestAesAlg,
 		BCRYPT_AES_ALGORITHM,
-		NULL,
+		nullptr,
 		0
 	);
 
@@ -862,10 +862,10 @@ void main()
 		hTestKey,
 		&pbCipherDll[32],
 		cbCipherDll,
-		NULL,
+		nullptr,
 		pbTestIV,
 		cbTestBlockLen,
-		NULL,
+		nullptr,
 		0,
 		&cbTestRawData,
 		BCRYPT_BLOCK_PADDING);
@@ -876,7 +876,7 @@ void main()
 		hTestKey,
 		&pbCipherDll[32],
 		cbCipherDll,
-		NULL,
+		nullptr,
 		pbTestIV,
 		cbTestBlockLen,
 		pbTestRawData,

