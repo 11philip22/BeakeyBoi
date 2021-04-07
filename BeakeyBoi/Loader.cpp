@@ -1,7 +1,9 @@
 // RDIShellcodeCLoader.cpp : Defines the entry point for the console application.
 //
+
 // ReSharper disable CppClangTidyHicppAvoidGoto
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidGoto
+
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <Windows.h>
@@ -9,6 +11,9 @@
 #include <iosfwd>
 #include <fstream>
 #include <cstdio>
+
+#include "HexDump.h"
+#include "Test.h"
 
 #include "Dll.h"
 #include "Payload.h"
@@ -352,45 +357,6 @@ VOID GenerateRandomBytes(PBYTE in, SIZE_T inSize)
 	extraNoise += 1337;
 }
 
-VOID HexDump(const PVOID data, SIZE_T size) {
-	char ascii[17];
-	SIZE_T i, j;
-	ascii[16] = '\0';
-	for (i = 0; i < size; ++i) {
-		wprintf(L"%02X ", ((PBYTE)data)[i]);
-		if (((PBYTE)data)[i] >= ' ' && ((PBYTE)data)[i] <= '~') {
-			ascii[i % 16] = ((PBYTE)data)[i];
-		}
-		else {
-			ascii[i % 16] = '.';
-		}
-		if ((i + 1) % 8 == 0 || i + 1 == size) {
-			wprintf(L" ");
-			if ((i + 1) % 16 == 0) {
-				wprintf(L"|  %hs \n", ascii);
-			}
-			else if (i + 1 == size) {
-				ascii[(i + 1) % 16] = '\0';
-				if ((i + 1) % 16 <= 8) {
-					wprintf(L" ");
-				}
-				for (j = (i + 1) % 16; j < 16; ++j) {
-					wprintf(L"   ");
-				}
-				wprintf(L"|  %hs \n", ascii);
-			}
-		}
-	}
-	wprintf(L"\n");
-}
-
-// Todo: remove test func
-#ifdef _DEBUG
-VOID Mcpy(unsigned char* src, unsigned char* dst, int size) {
-	for (int i = 0; i < size; dst[i++] = src[i]);
-}
-#endif
-
 typedef UINT_PTR (WINAPI* RDI)();
 typedef void	 (WINAPI* Function)();
 typedef BOOL	 (__cdecl* EXPORTEDFUNCTION)(LPVOID, DWORD);
@@ -426,22 +392,9 @@ void main()
 							rgbDllAES128Key[16] = {},
 							rgbIV[16] = {},
 							rgbAES128Key[16] = {};
-	std::fstream			outFile;
-
-	// Todo: remove test variables
-#ifdef _DEBUG
-	BYTE rgbTestAES128Key[16] = {};
-	BYTE rgbTestIV[16] = {};
-	BCRYPT_HANDLE hTestAesAlg = nullptr;
-	DWORD cbTestData = 0;
-	PBYTE pbTestKeyObject = nullptr;
-	DWORD cbTestBlockLen = 0;
-	PBYTE pbTestIV = nullptr;
-	BCRYPT_KEY_HANDLE hTestKey = nullptr;
-	DWORD cbTestKeyObject = 0;
-	DWORD cbTestRawData = 0;
-	PBYTE pbTestRawData = nullptr;
-#endif
+	std::fstream			outFile,
+							dllFile,
+							payloadFile;
 
 	GenerateRandomBytes(rgbDllAES128Key, sizeof(rgbDllAES128Key));
 	GenerateRandomBytes(rgbDllIV, sizeof(rgbDllIV));
@@ -608,7 +561,6 @@ void main()
 	HexDump(pbCipherPayload, cbCipherPayload + 32);
 #endif
 
-	
 	///
 	// Encrypt Dll
 	///
@@ -766,130 +718,23 @@ void main()
 	HexDump(dllCreds, sizeof(dllCreds));
 	wprintf(L"[+] Dumping cipher Dll\n");
 	HexDump(pbCipherDll, cbCipherDll + 32);
+
+	// Dll test decryption
+	TestDecryption(pbCipherDll, cbCipherDll, rgbDllAES128Key, rgbDllIV);
+
+	// Dump pbCipherDll to file
+	dllFile = std::fstream(R"(C:\Users\Philip\source\repos\BeakeyBoi\bin\pbCipherDll_x86.bin)",
+		std::ios::out | std::ios::binary);
+	dllFile.write((LPCSTR)pbCipherDll, cbCipherDll + 32);
+	dllFile.close();
+
+	// Dump Payload to file
+	payloadFile = std::fstream(R"(C:\Users\Philip\source\repos\BeakeyBoi\bin\pbCipherPayload_x86.bin)",
+		std::ios::out | std::ios::binary);
+	payloadFile.write((LPCSTR)pbCipherPayload, cbCipherPayload + 32);
+	payloadFile.close();
 #endif
 
-	// Todo: remove test blob
-#ifdef _DEBUG
-	/// 
-	// Test Dll decryption
-	///
-	
-	Mcpy(pbCipherDll, rgbTestAES128Key, 16);
-	Mcpy(&pbCipherDll[16], rgbTestIV, 16);
-
-	wprintf(L"[+] Dumping dll recovered creds\n");
-	HexDump(rgbTestAES128Key, sizeof(rgbTestAES128Key));
-	HexDump(rgbTestIV, sizeof(rgbTestIV));
-
-	if (memcmp(rgbTestAES128Key, rgbDllAES128Key, sizeof(rgbDllAES128Key)) == 0)
-		wprintf(L"[+] Key test passed\n");
-	else
-		wprintf(L"[-] Key test failed\n");
-
-	if (memcmp(rgbTestIV, rgbDllIV, sizeof(rgbDllIV)) == 0)
-		wprintf(L"[+] IV test passed\n");
-	else
-		wprintf(L"[-] IV test failed\n");
-
-	// Open an algorithm handle.
-	BCryptOpenAlgorithmProvider(
-		&hTestAesAlg,
-		BCRYPT_AES_ALGORITHM,
-		nullptr,
-		0
-	);
-
-	// Calculate the size of the buffer to hold the KeyObject.
-	BCryptGetProperty(
-		hTestAesAlg,
-		BCRYPT_OBJECT_LENGTH,
-		(PBYTE)&cbTestKeyObject,
-		sizeof(DWORD),
-		&cbTestData,
-		0
-	);
-
-	// Allocate the key object on the heap.
-	pbTestKeyObject = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbTestKeyObject);
-
-	// Calculate the block length for the IV.
-	BCryptGetProperty(
-		hTestAesAlg,
-		BCRYPT_BLOCK_LENGTH,
-		(PBYTE)&cbTestBlockLen,
-		sizeof(DWORD),
-		&cbData,
-		0
-	);
-
-	// Calculate the block length for the IV.
-	BCryptGetProperty(
-		hTestAesAlg,
-		BCRYPT_BLOCK_LENGTH,
-		(PBYTE)&cbTestBlockLen,
-		sizeof(DWORD),
-		&cbTestData,
-		0
-	);
-
-	// Allocate a buffer for the IV. The buffer is consumed during the 
-	// encrypt/decrypt process.
-	pbTestIV = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbTestBlockLen);
-
-	Mcpy(rgbTestIV, pbTestIV, 16);
-
-	BCryptSetProperty(
-		hTestAesAlg,
-		BCRYPT_CHAINING_MODE,
-		(PBYTE)BCRYPT_CHAIN_MODE_CBC,
-		sizeof(BCRYPT_CHAIN_MODE_CBC),
-		0
-	);
-
-	// Generate the key from supplied input key bytes.
-	BCryptGenerateSymmetricKey(
-		hTestAesAlg,
-		&hTestKey,
-		pbTestKeyObject,
-		cbTestKeyObject,
-		(PBYTE)rgbTestAES128Key,
-		sizeof(rgbTestAES128Key),
-		0
-	);
-
-	// Get the output buffer size.
-	BCryptDecrypt(
-		hTestKey,
-		&pbCipherDll[32],
-		cbCipherDll,
-		nullptr,
-		pbTestIV,
-		cbTestBlockLen,
-		nullptr,
-		0,
-		&cbTestRawData,
-		BCRYPT_BLOCK_PADDING);
-
-	pbTestRawData = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbTestRawData);
-
-	BCryptDecrypt(
-		hTestKey,
-		&pbCipherDll[32],
-		cbCipherDll,
-		nullptr,
-		pbTestIV,
-		cbTestBlockLen,
-		pbTestRawData,
-		cbTestRawData,
-		&cbTestRawData,
-		BCRYPT_BLOCK_PADDING);
-
-	if (memcmp(rgbRawDll, pbTestRawData, sizeof(rgbRawDll)) == 0)
-		wprintf(L"[+] Dll decryption test passed\n");
-	else
-		wprintf(L"[-] Dll decryption test failed\n");
-#endif
-	
 	///
 	// Create shellcode
 	///
@@ -918,6 +763,8 @@ void main()
 		goto Cleanup;
 	}
 
+	// todo: add parameter or something for out file
+	// Write shellcode to file
 	outFile = std::fstream(R"(C:\Users\Philip\source\repos\BeakeyBoi\bin\FinalShellcodeRDI_x86.bin)", 
 		std::ios::out | std::ios::binary);
 	outFile.write(finalShellcode, finalSize);
@@ -965,22 +812,4 @@ Cleanup:
 
 	if (pbIV)
 		HeapFree(GetProcessHeap(), 0, pbIV);
-
-	// Todo: remove test cleanup
-#ifdef _DEBUG
-	if (hTestAesAlg)
-		BCryptCloseAlgorithmProvider(hTestAesAlg, 0);
-
-	if (hTestKey)
-		BCryptDestroyKey(hTestKey);
-
-	if (pbTestRawData)
-		HeapFree(GetProcessHeap(), 0, pbTestRawData);
-
-	if (pbTestKeyObject)
-		HeapFree(GetProcessHeap(), 0, pbTestKeyObject);
-
-	if (pbTestIV)
-		HeapFree(GetProcessHeap(), 0, pbTestIV);
-#endif
 }

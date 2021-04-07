@@ -1,3 +1,7 @@
+// todo: fix project options and remove all debugging
+// todo: remove debug flag
+#define _DEBUG
+
 #define WIN32_LEAN_AND_MEAN
 
 #pragma warning( disable : 4201 ) // Disable warning about 'nameless struct/union'
@@ -7,7 +11,11 @@
 #include <windows.h>
 #include <winternl.h>
 #include <intrin.h>
-//#include <bcrypt.h>
+#include <bcrypt.h>
+
+#ifdef _DEBUG
+#include "Dummy.h"
+#endif
 
 #define SRDI_CLEARHEADER 0x1
 #define SRDI_CLEARMEMORY 0x2
@@ -42,7 +50,6 @@
 #define BCRYPTDESTROYKEYHASH			0x0D11B053
 #define COPYMEMORYHASH					0x25B58ABE
 
-
 #define HASH_KEY						13
 
 #ifdef _WIN64
@@ -51,6 +58,8 @@
 #define HOST_MACHINE IMAGE_FILE_MACHINE_I386
 #endif
 
+// todo: remove
+//all used bcrypt macros
 //#define BCRYPT_AES_ALGORITHM L"AES"
 //#define BCRYPT_OBJECT_LENGTH L"ObjectLength"
 //#define BCRYPT_BLOCK_LENGTH L"BlockLength"
@@ -144,8 +153,12 @@ VOID Mcpy(unsigned char* src, unsigned char* dst, int size) {
 	for (int i = 0; i < size; dst[i++] = src[i]);
 }
 
+#ifdef _DEBUG
+ULONG_PTR LoadDLL()
+#else
 ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash, 
 	LPVOID lpUserData, DWORD nUserdataLen, DWORD cbCipherText)
+#endif
 {
 #pragma warning( push )
 #pragma warning( disable : 4055 ) // Ignore cast warnings
@@ -255,6 +268,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	BYTE sHeapFree[] = { 'H', 'e', 'a', 'p', 'F', 'r', 'e', 'e' };
 
 	// Bcrypt macro strings
+	//todo: fix
 	WCHAR sChainingModeCBC[] = { 'C', 'h', 'a', 'i', 'n', 'i', 'n', 'g', 'M', 'o', 'd', 'e', 'C', 'B', 'C' };
 	WCHAR sChainingMode[] = { 'C', 'h', 'a', 'i', 'n', 'i', 'n', 'g', 'M', 'o', 'd', 'e' };
 	WCHAR sBlockLength[] = { 'B', 'l', 'o', 'c', 'k', 'L', 'e', 'n', 'g', 't', 'h' };
@@ -391,7 +405,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	// Open an algorithm handle.	
 	if (!NT_SUCCESS(status = pBCryptOpenAlgorithmProvider(
 		&hAesAlg,
-		sAES,
+		/*sAES*/BCRYPT_AES_ALGORITHM,  	// todo: fix
 		NULL,
 		0)))
 	{
@@ -401,7 +415,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	// Calculate the size of the buffer to hold the KeyObject.
 	if (!NT_SUCCESS(status = pBCryptGetProperty(
 		hAesAlg,
-		sObjectLength,
+		/*sObjectLength*/BCRYPT_OBJECT_LENGTH,  // todo: fix
 		(PBYTE)&cbKeyObject,
 		sizeof(DWORD),
 		&cbData,
@@ -414,19 +428,9 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	pbKeyObject = (PBYTE)pHeapAlloc(pGetProcessHeap(), 0, cbKeyObject);
 
 	// Calculate the block length for the IV.
-	pBCryptGetProperty(
-		hAesAlg,
-		sBlockLength,
-		(PBYTE)&cbBlockLen,
-		sizeof(DWORD),
-		&cbData,
-		0
-	);
-
-	// Calculate the block length for the IV.
 	if (!NT_SUCCESS(status = pBCryptGetProperty(
 		hAesAlg,
-		sBlockLength,
+		/*sBlockLength*/BCRYPT_BLOCK_LENGTH,  // todo: fix
 		(PBYTE)&cbBlockLen,
 		sizeof(DWORD),
 		&cbData,
@@ -443,8 +447,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 	// Allocate a buffer for the IV. The buffer is consumed during the 
 	// encrypt/decrypt process.
-	pbIV = (PBYTE)pVirtualAlloc(NULL, cbBlockLen, 
-		MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+	pbIV = (PBYTE)pHeapAlloc(pGetProcessHeap(), 0, cbBlockLen);
 	if (NULL == pbIV)
 	{
 		goto Cleanup;
@@ -455,9 +458,9 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 	if (!NT_SUCCESS(status = pBCryptSetProperty(
 		hAesAlg,
-		sChainingMode,
-		(PBYTE)sChainingModeCBC,
-		sizeof(sChainingModeCBC),
+		/*sChainingMode*/BCRYPT_CHAINING_MODE,
+		(PBYTE)/*sChainingModeCBC*/BCRYPT_CHAIN_MODE_CBC,   // todo: fix
+		sizeof(/*sChainingModeCBC*/BCRYPT_CHAIN_MODE_CBC),  // todo: fix
 		0)))
 	{
 		goto Cleanup;
@@ -846,6 +849,9 @@ Cleanup:
 
 	if (hKey)
 		pBCryptDestroyKey(hKey);
+
+	if (pbIV)
+		pHeapFree(pGetProcessHeap(), 0, pbIV);
 
 	if (pbKeyObject)
 		pHeapFree(pGetProcessHeap(), 0, pbKeyObject);

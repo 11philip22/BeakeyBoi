@@ -540,6 +540,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Dummy.h" />
     <ClInclude Include="GetProcAddressWithHash.h" />
   </ItemGroup>
   <ItemGroup>
