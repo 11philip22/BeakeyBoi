@@ -712,7 +712,6 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 		}
 	}
 
-
 	///
 	// STEP 7: Finalize our sections. Set memory protections.
 	///
