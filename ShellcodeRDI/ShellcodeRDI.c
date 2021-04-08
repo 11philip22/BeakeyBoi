@@ -1,6 +1,3 @@
-// todo: fix project options and remove all debugging
-// todo: remove debug flag
-#define _DEBUG
 #define WIN32_LEAN_AND_MEAN
 
 #pragma warning( disable : 4201 ) // Disable warning about 'nameless struct/union'
@@ -262,7 +259,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	WCHAR sChainingMode[] = { 'C', 'h', 'a', 'i', 'n', 'i', 'n', 'g', 'M', 'o', 'd', 'e', 0 };
 	WCHAR sBlockLength[] = { 'B', 'l', 'o', 'c', 'k', 'L', 'e', 'n', 'g', 't', 'h', 0 };
 	WCHAR sObjectLength[] = { 'O', 'b', 'j', 'e', 'c', 't', 'L', 'e', 'n', 'g', 't', 'h', 0 };
-	WCHAR sAES[] = { 'A', 'E', 'S' };
+	WCHAR sAES[] = { 'A', 'E', 'S', 0 };
 	
 	// Crypto
 	NTSTATUS status = STATUS_UNSUCCESSFUL;
@@ -384,6 +381,11 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	{
 		return 0;
 	}
+
+
+	///
+	// STEP 2: Decrypt dll
+	///
 	
 	// Copy key and iv from the first 32 bytes of cipher text
 	//pCopyMemory(rgbAES128Key, pbCipherText, 16);
@@ -506,7 +508,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	}
 
 	///
-	// STEP 2: load our image into a new permanent location in memory
+	// STEP 3: load our image into a new permanent location in memory
 	///
 
 	ntHeaders = RVA(PIMAGE_NT_HEADERS, pbRawData, ((PIMAGE_DOS_HEADER)pbRawData)->e_lfanew);
@@ -573,7 +575,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	ntHeaders = RVA(PIMAGE_NT_HEADERS, baseAddress, ((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew);
 
 	///
-	// STEP 3: Load in the sections
+	// STEP 4: Load in the sections
 	///
 
 	sectionHeader = IMAGE_FIRST_SECTION(ntHeaders);
@@ -585,7 +587,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	}
 
 	///
-	// STEP 4: process all of our images relocations (assuming we missed the preferred address)
+	// STEP 5: process all of our images relocations (assuming we missed the preferred address)
 	///
 
 	baseOffset = baseAddress - ntHeaders->OptionalHeader.ImageBase;
@@ -616,7 +618,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	}
 
 	///
-	// STEP 5: process our import table
+	// STEP 6: process our import table
 	///
 
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
@@ -673,7 +675,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	}
 
 	///
-	// STEP 6: process our delayed import table
+	// STEP 7: process our delayed import table
 	///
 
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
@@ -702,7 +704,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	}
 
 	///
-	// STEP 7: Finalize our sections. Set memory protections.
+	// STEP 8: Finalize our sections. Set memory protections.
 	///
 
 	sectionHeader = IMAGE_FIRST_SECTION(ntHeaders);
@@ -751,7 +753,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	pFlushInstructionCache((HANDLE)-1, NULL, 0);
 
 	///
-	// STEP 8: Execute TLS callbacks
+	// STEP 9: Execute TLS callbacks
 	///
 
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
@@ -767,7 +769,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	}
 
 	///
-	// STEP 9: Register exception handlers (x64 only)
+	// STEP 10: Register exception handlers (x64 only)
 	///
 
 #ifdef _WIN64
@@ -781,14 +783,14 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 #endif
 
 	///
-	// STEP 10: call our images entry point
+	// STEP 11: call our images entry point
 	///
 
 	dllMain = RVA(DLLMAIN, baseAddress, ntHeaders->OptionalHeader.AddressOfEntryPoint);
 	dllMain((HINSTANCE)baseAddress, DLL_PROCESS_ATTACH, (LPVOID)1);
 
 	///
-	// STEP 11: call our exported function
+	// STEP 12: call our exported function
 	///
 
 	if (dwFunctionHash) {
