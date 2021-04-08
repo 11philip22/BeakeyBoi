@@ -135,7 +135,7 @@ _wcslen(wchar_t* s) {
 #define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
 #define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
 
-VOID Mcpy(unsigned char* src, unsigned char* dst, int size) {
+VOID Mcpy(PBYTE src, PBYTE dst, SIZE_T size) {
 	for (int i = 0; i < size; dst[i++] = src[i]);
 }
 
@@ -388,8 +388,6 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	///
 	
 	// Copy key and iv from the first 32 bytes of cipher text
-	//pCopyMemory(rgbAES128Key, pbCipherText, 16);
-	//pCopyMemory(rgbIV, &pbCipherText[16], 16);
 	Mcpy(pbCipherText, rgbAES128Key, 16);
 	Mcpy(&pbCipherText[16], rgbIV, 16);
 
