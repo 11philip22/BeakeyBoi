@@ -89,7 +89,7 @@
       <OmitFramePointers>true</OmitFramePointers>
       <OmitDefaultLibName>true</OmitDefaultLibName>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DebugInformationFormat>None</DebugInformationFormat>
       <BasicRuntimeChecks />
       <DisableLanguageExtensions />
       <CallingConvention />
@@ -460,7 +460,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <ShowProgress>
@@ -540,6 +540,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Dummy.h" />
     <ClInclude Include="GetProcAddressWithHash.h" />
   </ItemGroup>
   <ItemGroup>
