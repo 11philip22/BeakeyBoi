@@ -146,9 +146,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Dll.h" />
-    <ClInclude Include="HexDump.h" />
     <ClInclude Include="Payload.h" />
-    <ClInclude Include="Test.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

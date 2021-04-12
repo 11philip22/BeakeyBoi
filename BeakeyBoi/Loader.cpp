@@ -9,6 +9,7 @@
 // ReSharper disable once CppInconsistentNaming
 // ReSharper disable CppLocalVariableMayBeConst
 // ReSharper disable CppParameterMayBeConst
+// ReSharper disable CppClangTidyBugproneExceptionEscape
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <Windows.h>
@@ -16,9 +17,6 @@
 #include <iosfwd>
 #include <fstream>
 #include <cstdio>
-
-#include "HexDump.h"
-#include "Test.h"
 
 #include "Dll.h"
 #include "Payload.h"
@@ -350,6 +348,38 @@ VOID GenerateRandomBytes(PBYTE in, SIZE_T inSize)
 	}
 
 	extraNoise += 1337;
+}
+
+VOID HexDump(const PVOID data, SIZE_T size) {
+	char ascii[17];
+	SIZE_T i, j;
+	ascii[16] = '\0';
+	for (i = 0; i < size; ++i) {
+		wprintf(L"%02X ", ((PBYTE)data)[i]);
+		if (((PBYTE)data)[i] >= ' ' && ((PBYTE)data)[i] <= '~') {
+			ascii[i % 16] = ((PBYTE)data)[i];
+		}
+		else {
+			ascii[i % 16] = '.';
+		}
+		if ((i + 1) % 8 == 0 || i + 1 == size) {
+			wprintf(L" ");
+			if ((i + 1) % 16 == 0) {
+				wprintf(L"|  %hs \n", ascii);
+			}
+			else if (i + 1 == size) {
+				ascii[(i + 1) % 16] = '\0';
+				if ((i + 1) % 16 <= 8) {
+					wprintf(L" ");
+				}
+				for (j = (i + 1) % 16; j < 16; ++j) {
+					wprintf(L"   ");
+				}
+				wprintf(L"|  %hs \n", ascii);
+			}
+		}
+	}
+	wprintf(L"\n");
 }
 
 typedef UINT_PTR (WINAPI* RDI)();
@@ -713,9 +743,6 @@ void main()
 	HexDump(dllCreds, sizeof(dllCreds));
 	wprintf(L"[+] Dumping cipher Dll\n");
 	HexDump(pbCipherDll, cbCipherDll + 32);
-
-	// Dll test decryption
-	TestDecryption(pbCipherDll, cbCipherDll, rgbDllAES128Key, rgbDllIV);
 
 	// Dump pbCipherDll to file
 	dllFile = std::fstream(R"(C:\Users\Philip\source\repos\BeakeyBoi\bin\pbCipherDll_x86.bin)",
