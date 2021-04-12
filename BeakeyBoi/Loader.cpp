@@ -1,9 +1,14 @@
 // RDIShellcodeCLoader.cpp : Defines the entry point for the console application.
 //
-
 // ReSharper disable CppClangTidyHicppAvoidGoto
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidGoto
-
+// ReSharper disable CppUseAuto
+// ReSharper disable CppClangTidyModernizeUseAuto
+// ReSharper disable CppClangTidyClangDiagnosticReservedIdMacro
+// ReSharper disable CppClangTidyCppcoreguidelinesMacroUsage
+// ReSharper disable once CppInconsistentNaming
+// ReSharper disable CppLocalVariableMayBeConst
+// ReSharper disable CppParameterMayBeConst
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <Windows.h>
@@ -20,17 +25,8 @@
 
 #pragma comment(lib, "Bcrypt.lib")
 
-#define DEREF_64( name )*(DWORD64 *)(name)
-#define DEREF_32( name )*(DWORD *)(name)
-#define DEREF_16( name )*(WORD *)(name)
-#define DEREF_8( name )*(BYTE *)(name)
-
-#define ROTR32(value, shift)	(((DWORD) value >> (BYTE) shift) | ((DWORD) value << (32 - (BYTE) shift)))
-#define RVA(type, base, rva) (type)((ULONG_PTR) base + rva)
-
-#define SRDI_CLEARHEADER 0x1
-#define SRDI_CLEARMEMORY 0x2
-#define SRDI_OBFUSCATEIMPORTS 0x4
+#define ROTR32(value, shift)	(((DWORD) (value) >> (BYTE) (shift)) | ((DWORD) (value) << (32 - (BYTE) (shift))))
+#define RVA(type, base, rva) (type)((ULONG_PTR) (base) + (rva))
 
 FARPROC GetProcAddressR(HMODULE hModule, LPCSTR lpProcName)
 {
@@ -48,11 +44,10 @@ FARPROC GetProcAddressR(HMODULE hModule, LPCSTR lpProcName)
 
 	PDWORD expName = RVA(PDWORD, hModule, exportDir->AddressOfNames);
 	PWORD expOrdinal = RVA(PWORD, hModule, exportDir->AddressOfNameOrdinals);
-	LPCSTR expNameStr;
 
 	for (DWORD i = 0; i < exportDir->NumberOfNames; i++, expName++, expOrdinal++) {
 
-		expNameStr = RVA(LPCSTR, hModule, *expName);
+		LPCSTR expNameStr = RVA(LPCSTR, hModule, *expName);
 
 		if (!expNameStr)
 			break;
@@ -66,9 +61,9 @@ FARPROC GetProcAddressR(HMODULE hModule, LPCSTR lpProcName)
 	return nullptr;
 }
 
-BOOL Is64BitDLL(UINT_PTR uiLibraryAddress)
+BOOL Is64BitDll(UINT_PTR uiLibraryAddress)
 {
-	PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)(uiLibraryAddress + ((PIMAGE_DOS_HEADER)uiLibraryAddress)->e_lfanew);
+	const PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)(uiLibraryAddress + ((PIMAGE_DOS_HEADER)uiLibraryAddress)->e_lfanew);
 
 	if (pNtHeaders->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) 
 		return true;
@@ -127,7 +122,7 @@ BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction,
 	//MARKER:E
 #endif
 
-	if (Is64BitDLL((UINT_PTR)plainInBytes))
+	if (Is64BitDll((UINT_PTR)plainInBytes))
 	{
 
 		rdiShellcode = rdiShellcode64;
