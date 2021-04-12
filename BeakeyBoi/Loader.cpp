@@ -510,7 +510,7 @@ void main()
 		&hKey,
 		pbKeyObject,
 		cbKeyObject,
-		(PBYTE)rgbAES128Key,
+		static_cast<PBYTE>(rgbAES128Key),
 		sizeof(rgbAES128Key),
 		0)))
 	{
