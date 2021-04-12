@@ -160,32 +160,20 @@ void Run(PBYTE pbCipherText, DWORD cbCipherText)
 Cleanup:
 
     if (hAesAlg)
-    {
         BCryptCloseAlgorithmProvider(hAesAlg, 0);
-    }
 
     if (hKey)
-    {
         BCryptDestroyKey(hKey);
-    }
 
     if (pbCipherText)
-    {
         HeapFree(GetProcessHeap(), 0, pbCipherText);
-    }
 
     if (pbRawData)
-    {
         HeapFree(GetProcessHeap(), 0, pbRawData);
-    }
 
     if (pbKeyObject)
-    {
         HeapFree(GetProcessHeap(), 0, pbKeyObject);
-    }
 
     if (pbIV)
-    {
         HeapFree(GetProcessHeap(), 0, pbIV);
-    }
 }
