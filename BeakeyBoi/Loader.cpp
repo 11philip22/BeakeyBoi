@@ -224,7 +224,7 @@ BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction,
 
 		// Ends up looking like this in memory:
 		// Bootstrap shellcode
-		// RDI shellcode
+		// RDI shellcode 
 		// DLL bytes
 		// User data
 		outLength = length + userLength + rdiShellcodeLength + sizeof(bootstrap);
@@ -519,7 +519,7 @@ void main()
 	}
 
 	cbRawPayload = sizeof(rgbRawPayload);
-	pbRawPayload = (PBYTE)HeapAlloc(GetProcessHeap(), 0, cbRawPayload);
+	pbRawPayload = static_cast<PBYTE>(HeapAlloc(GetProcessHeap(), 0, cbRawPayload));
 	if (nullptr == pbRawPayload)
 	{
 		wprintf(L"[!] memory allocation failed\n");
