@@ -686,7 +686,7 @@ void main()
 		goto Cleanup;
 	}
 
-	memcpy(pbRawDll, rgbRawDll, sizeof(rgbRawDll));
+	memcpy(pbRawDll, rgbRawDll, cbRawDll);
 
 	//
 	// Get the output buffer size.
