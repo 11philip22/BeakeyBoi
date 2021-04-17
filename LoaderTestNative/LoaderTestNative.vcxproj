@@ -142,7 +142,7 @@
     <ClCompile Include="LoaderTest.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GetProcAddressWithHash.h" />
+    <ClInclude Include="GetProcAddressWithHash.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

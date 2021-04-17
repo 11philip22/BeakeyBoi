@@ -16,7 +16,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GetProcAddressWithHash.h">
+    <ClInclude Include="GetProcAddressWithHash.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

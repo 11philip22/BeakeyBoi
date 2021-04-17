@@ -5,7 +5,7 @@
 #include <functional>
 #include <winternl.h>
 
-#include "GetProcAddressWithHash.h"
+#include "GetProcAddressWithHash.hpp"
 
 #ifdef LOADER_EXPORTS
 #define LOADER_API __declspec(dllexport)

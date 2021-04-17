@@ -5,7 +5,7 @@
 #include <bcrypt.h>
 #include <functional>
 
-#include "GetProcAddressWithHash.h"
+#include "GetProcAddressWithHash.hpp"
 
 #pragma comment(lib, "Bcrypt.lib")
 
