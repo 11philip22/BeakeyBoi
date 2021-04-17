@@ -145,7 +145,14 @@
     <ClCompile Include="Loader.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Dll.hpp" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="BeakeyBoi.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Release\Loader.dll" />
+    <None Include="..\x64\Release\Loader.dll" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

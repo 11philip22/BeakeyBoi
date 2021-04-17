@@ -1,3 +1,4 @@
+// ReSharper disable CppClangTidyCppcoreguidelinesMacroUsage
 #define WIN32_LEAN_AND_MEAN
 
 #include <Windows.h>
@@ -5,7 +6,7 @@
 #include <functional>
 #include <winternl.h>
 
-#include "GetProcAddressWithHash.hpp"
+#include "GetProcAddressWithHash.h"
 
 #ifdef LOADER_EXPORTS
 #define LOADER_API __declspec(dllexport)
@@ -18,10 +19,11 @@
 
 #define NT_SUCCESS(Status)          (((NTSTATUS)(Status)) >= 0)
 #define STATUS_UNSUCCESSFUL         ((NTSTATUS)0xC0000001L)
+
 #define FILL_STRING_WITH_BUF(string, buffer) \
 	string.Length = sizeof(buffer); \
-	string.MaximumLength = string.Length; \
-	string.Buffer = (PCHAR)buffer
+	(string).MaximumLength = (string).Length; \
+	(string).Buffer = (PCHAR)buffer
 
 typedef NTSTATUS(WINAPI* LDRLOADDLL)(PWCHAR, ULONG, PUNICODE_STRING, PHANDLE);
 typedef NTSTATUS(WINAPI* LDRGETPROCADDRESS)(HMODULE, PANSI_STRING, WORD, PVOID*);
