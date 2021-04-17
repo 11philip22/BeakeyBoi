@@ -16,7 +16,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Dll.h">
+    <ClInclude Include="Dll.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

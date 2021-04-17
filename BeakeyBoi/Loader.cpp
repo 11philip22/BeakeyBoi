@@ -18,7 +18,7 @@
 #include <fstream>
 #include <cstdio>
 
-#include "Dll.h"
+#include "Dll.hpp"
 
 #pragma comment(lib, "Bcrypt.lib")
 

@@ -145,7 +145,7 @@
     <ClCompile Include="Loader.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Dll.h" />
+    <ClInclude Include="Dll.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
