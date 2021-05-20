@@ -349,7 +349,7 @@ VOID GenerateRandomBytes(PBYTE in, SIZE_T inSize)
 	extraNoise += 1337;
 }
 
-#ifdef DEBUG
+#ifdef _DEBUG
 VOID HexDump(const PVOID data, SIZE_T size) {
 	char ascii[17];
 	SIZE_T i, j;
@@ -381,7 +381,7 @@ VOID HexDump(const PVOID data, SIZE_T size) {
 	}
 	wprintf(L"\n");
 }
-#endif // DEBUG
+#endif // _DEBUG
 
 typedef UINT_PTR (WINAPI* RDI)();
 typedef void	 (WINAPI* Function)();
