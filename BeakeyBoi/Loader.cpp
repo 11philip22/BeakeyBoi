@@ -818,7 +818,7 @@ Cleanup:
 		HeapFree(GetProcessHeap(), 0, pbIV);
 
 	if (rgbRawDll)
-		free(rgbRawDll);
+		delete rgbRawDll;
 
 	return status;
 }
