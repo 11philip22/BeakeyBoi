@@ -195,7 +195,7 @@ BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction,
 		bootstrap[i++] = 0xec;
 		bootstrap[i++] = 6 * 8; // 32 bytes for shadow space + 8 bytes for last arg + 8 bytes for stack alignment
 
-		// mov dword ptr [rsp + 0x20], <Flags> - Push arg 5 just above shadow space
+		// mov dword ptr [rsp + 0x20], <Length> - Push arg 5 just above shadow space
 		bootstrap[i++] = 0xC7;
 		bootstrap[i++] = 0x44;
 		bootstrap[i++] = 0x24;
@@ -280,7 +280,7 @@ BOOL ConvertToShellcode(LPVOID inBytes, DWORD length, DWORD userFunction,
 		MoveMemory(bootstrap + i, &userDataLocation, sizeof(userDataLocation));
 		i += sizeof(userDataLocation);
 
-		// push <Flags>
+		// push <Length>
 		bootstrap[i++] = 0x68;
 		MoveMemory(bootstrap + i, &length, sizeof(length));
 		i += sizeof(length);
@@ -349,6 +349,7 @@ VOID GenerateRandomBytes(PBYTE in, SIZE_T inSize)
 	extraNoise += 1337;
 }
 
+#ifdef DEBUG
 VOID HexDump(const PVOID data, SIZE_T size) {
 	char ascii[17];
 	SIZE_T i, j;
@@ -380,6 +381,7 @@ VOID HexDump(const PVOID data, SIZE_T size) {
 	}
 	wprintf(L"\n");
 }
+#endif // DEBUG
 
 typedef UINT_PTR (WINAPI* RDI)();
 typedef void	 (WINAPI* Function)();
