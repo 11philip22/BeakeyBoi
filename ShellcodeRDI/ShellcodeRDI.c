@@ -143,7 +143,7 @@ VOID Mcpy(PBYTE src, PBYTE dst, SIZE_T size) {
 ULONG_PTR LoadDLL()
 #else
 ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash, 
-	LPVOID lpUserData, DWORD nUserdataLen, DWORD cbCipherText)
+	LPVOID lpUserData, DWORD dwUserdataLen, DWORD cbCipherText)
 #endif
 {
 #pragma warning( push )
@@ -263,9 +263,10 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	
 	// Crypto
 	NTSTATUS status = STATUS_UNSUCCESSFUL;
-	BYTE rgbIV[16] = { 0 };
-	BYTE rgbAES128Key[16] = { 0 };
+	BYTE  rgbIV[16] = { 0 };
+	BYTE  rgbAES128Key[16] = { 0 };
 	PVOID hAesAlg = NULL;
+	PVOID hKey = NULL;
 	DWORD cbKeyObject = 0;
 	DWORD cbData = 0;
 	DWORD cbBlockLen = 0;
@@ -273,17 +274,16 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	PBYTE pbKeyObject = NULL;
 	PBYTE pbIV = NULL;
 	PBYTE pbRawData = NULL;
-	PVOID hKey = NULL;
 	
 	// Import obfuscation
-	DWORD randSeed;
-	DWORD rand;
-	DWORD sleep;
-	DWORD selection;
+	DWORD dwRandSeed;
+	DWORD dwRand;
+	DWORD dwSleep;
+	DWORD dwSelection;
 	IMAGE_IMPORT_DESCRIPTOR tempDesc;
 
 	// Relocated base
-	ULONG_PTR baseAddress;
+	ULONG_PTR pBaseAddress = NULL;
 
 	// -------
 
@@ -548,14 +548,14 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 	// Allocate all the memory for the DLL to be loaded into. Attempt to use the preferred base address.
 
-	baseAddress = (ULONG_PTR)pVirtualAlloc(
+	pBaseAddress = (ULONG_PTR)pVirtualAlloc(
 		(LPVOID)(ntHeaders->OptionalHeader.ImageBase),
 		alignedImageSize,
 		MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE
 	);
 
-	if (baseAddress == 0) {
-		baseAddress = (ULONG_PTR)pVirtualAlloc(
+	if (pBaseAddress == 0) {
+		pBaseAddress = (ULONG_PTR)pVirtualAlloc(
 			NULL,
 			alignedImageSize,
 			MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE
@@ -564,13 +564,13 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 	// Copy over the headers
 
-	((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew = ((PIMAGE_DOS_HEADER)pbRawData)->e_lfanew;
+	((PIMAGE_DOS_HEADER)pBaseAddress)->e_lfanew = ((PIMAGE_DOS_HEADER)pbRawData)->e_lfanew;
 
 	for (i = ((PIMAGE_DOS_HEADER)pbRawData)->e_lfanew; i < ntHeaders->OptionalHeader.SizeOfHeaders; i++) {
-		((PBYTE)baseAddress)[i] = ((PBYTE)pbRawData)[i];
+		((PBYTE)pBaseAddress)[i] = ((PBYTE)pbRawData)[i];
 	}
 
-	ntHeaders = RVA(PIMAGE_NT_HEADERS, baseAddress, ((PIMAGE_DOS_HEADER)baseAddress)->e_lfanew);
+	ntHeaders = RVA(PIMAGE_NT_HEADERS, pBaseAddress, ((PIMAGE_DOS_HEADER)pBaseAddress)->e_lfanew);
 
 	///
 	// STEP 4: Load in the sections
@@ -580,7 +580,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 	for (i = 0; i < ntHeaders->FileHeader.NumberOfSections; i++, sectionHeader++) {
 		for (c = 0; c < sectionHeader->SizeOfRawData; c++) {
-			((PBYTE)(baseAddress + sectionHeader->VirtualAddress))[c] = ((PBYTE)(pbRawData + sectionHeader->PointerToRawData))[c];
+			((PBYTE)(pBaseAddress + sectionHeader->VirtualAddress))[c] = ((PBYTE)(pbRawData + sectionHeader->PointerToRawData))[c];
 		}
 	}
 
@@ -588,12 +588,12 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	// STEP 5: process all of our images relocations (assuming we missed the preferred address)
 	///
 
-	baseOffset = baseAddress - ntHeaders->OptionalHeader.ImageBase;
+	baseOffset = pBaseAddress - ntHeaders->OptionalHeader.ImageBase;
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
 
 	if (baseOffset && dataDir->Size) {
 
-		relocation = RVA(PIMAGE_BASE_RELOCATION, baseAddress, dataDir->VirtualAddress);
+		relocation = RVA(PIMAGE_BASE_RELOCATION, pBaseAddress, dataDir->VirtualAddress);
 
 		while (relocation->VirtualAddress) {
 			relocList = (PIMAGE_RELOC)(relocation + 1);
@@ -601,13 +601,13 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 			while ((PBYTE)relocList != (PBYTE)relocation + relocation->SizeOfBlock) {
 
 				if (relocList->type == IMAGE_REL_BASED_DIR64)
-					*(PULONG_PTR)((PBYTE)baseAddress + relocation->VirtualAddress + relocList->offset) += baseOffset;
+					*(PULONG_PTR)((PBYTE)pBaseAddress + relocation->VirtualAddress + relocList->offset) += baseOffset;
 				else if (relocList->type == IMAGE_REL_BASED_HIGHLOW)
-					*(PULONG_PTR)((PBYTE)baseAddress + relocation->VirtualAddress + relocList->offset) += (DWORD)baseOffset;
+					*(PULONG_PTR)((PBYTE)pBaseAddress + relocation->VirtualAddress + relocList->offset) += (DWORD)baseOffset;
 				else if (relocList->type == IMAGE_REL_BASED_HIGH)
-					*(PULONG_PTR)((PBYTE)baseAddress + relocation->VirtualAddress + relocList->offset) += HIWORD(baseOffset);
+					*(PULONG_PTR)((PBYTE)pBaseAddress + relocation->VirtualAddress + relocList->offset) += HIWORD(baseOffset);
 				else if (relocList->type == IMAGE_REL_BASED_LOW)
-					*(PULONG_PTR)((PBYTE)baseAddress + relocation->VirtualAddress + relocList->offset) += LOWORD(baseOffset);
+					*(PULONG_PTR)((PBYTE)pBaseAddress + relocation->VirtualAddress + relocList->offset) += LOWORD(baseOffset);
 
 				relocList++;
 			}
@@ -620,39 +620,39 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	///
 
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-	randSeed = (DWORD)((ULONGLONG)pbRawData);
+	dwRandSeed = (DWORD)((ULONGLONG)pbRawData);
 
 	if (dataDir->Size) {
 
-		importDesc = RVA(PIMAGE_IMPORT_DESCRIPTOR, baseAddress, dataDir->VirtualAddress);
+		importDesc = RVA(PIMAGE_IMPORT_DESCRIPTOR, pBaseAddress, dataDir->VirtualAddress);
 		importCount = 0;
 		for (; importDesc->Name; importDesc++) {
 			importCount++;
 		}
 
-		importDesc = RVA(PIMAGE_IMPORT_DESCRIPTOR, baseAddress, dataDir->VirtualAddress);
+		importDesc = RVA(PIMAGE_IMPORT_DESCRIPTOR, pBaseAddress, dataDir->VirtualAddress);
 		if (importCount > 1) {
-			sleep = (4096);
-			sleep = sleep >> 16;
+			dwSleep = (4096);
+			dwSleep = dwSleep >> 16;
 
 			for (i = 0; i < importCount - 1; i++) {
-				randSeed = (214013 * randSeed + 2531011);
-				rand = (randSeed >> 16) & 0x7FFF;
-				selection = i + rand / (32767 / (importCount - i) + 1);
+				dwRandSeed = (214013 * dwRandSeed + 2531011);
+				dwRand = (dwRandSeed >> 16) & 0x7FFF;
+				dwSelection = i + dwRand / (32767 / (importCount - i) + 1);
 
-				tempDesc = importDesc[selection];
-				importDesc[selection] = importDesc[i];
+				tempDesc = importDesc[dwSelection];
+				importDesc[dwSelection] = importDesc[i];
 				importDesc[i] = tempDesc;
 			}
 		}
 
-		importDesc = RVA(PIMAGE_IMPORT_DESCRIPTOR, baseAddress, dataDir->VirtualAddress);
+		importDesc = RVA(PIMAGE_IMPORT_DESCRIPTOR, pBaseAddress, dataDir->VirtualAddress);
 		for (; importDesc->Name; importDesc++) {
 
-			library = pLoadLibraryA((LPSTR)(baseAddress + importDesc->Name));
+			library = pLoadLibraryA((LPSTR)(pBaseAddress + importDesc->Name));
 
-			firstThunk = RVA(PIMAGE_THUNK_DATA, baseAddress, importDesc->FirstThunk);
-			origFirstThunk = RVA(PIMAGE_THUNK_DATA, baseAddress, importDesc->OriginalFirstThunk);
+			firstThunk = RVA(PIMAGE_THUNK_DATA, pBaseAddress, importDesc->FirstThunk);
+			origFirstThunk = RVA(PIMAGE_THUNK_DATA, pBaseAddress, importDesc->OriginalFirstThunk);
 
 			for (; origFirstThunk->u1.Function; firstThunk++, origFirstThunk++) {
 
@@ -660,14 +660,14 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 					pLdrGetProcAddress(library, NULL, (WORD)origFirstThunk->u1.Ordinal, (PVOID*)&(firstThunk->u1.Function));
 				}
 				else {
-					importByName = RVA(PIMAGE_IMPORT_BY_NAME, baseAddress, origFirstThunk->u1.AddressOfData);
+					importByName = RVA(PIMAGE_IMPORT_BY_NAME, pBaseAddress, origFirstThunk->u1.AddressOfData);
 					FILL_STRING(aString, importByName->Name);
 					pLdrGetProcAddress(library, &aString, 0, (PVOID*)&(firstThunk->u1.Function));
 				}
 			}
 
 			if (importCount > 1) {
-				pSleep(sleep * 1000);
+				pSleep(dwSleep * 1000);
 			}
 		}
 	}
@@ -679,21 +679,21 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	dataDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
 
 	if (dataDir->Size) {
-		delayDesc = RVA(PIMAGE_DELAYLOAD_DESCRIPTOR, baseAddress, dataDir->VirtualAddress);
+		delayDesc = RVA(PIMAGE_DELAYLOAD_DESCRIPTOR, pBaseAddress, dataDir->VirtualAddress);
 
 		for (; delayDesc->DllNameRVA; delayDesc++) {
 
-			library = pLoadLibraryA((LPSTR)(baseAddress + delayDesc->DllNameRVA));
+			library = pLoadLibraryA((LPSTR)(pBaseAddress + delayDesc->DllNameRVA));
 
-			firstThunk = RVA(PIMAGE_THUNK_DATA, baseAddress, delayDesc->ImportAddressTableRVA);
-			origFirstThunk = RVA(PIMAGE_THUNK_DATA, baseAddress, delayDesc->ImportNameTableRVA);
+			firstThunk = RVA(PIMAGE_THUNK_DATA, pBaseAddress, delayDesc->ImportAddressTableRVA);
+			origFirstThunk = RVA(PIMAGE_THUNK_DATA, pBaseAddress, delayDesc->ImportNameTableRVA);
 
 			for (; firstThunk->u1.Function; firstThunk++, origFirstThunk++) {
 				if (IMAGE_SNAP_BY_ORDINAL(origFirstThunk->u1.Ordinal)) {
 					pLdrGetProcAddress(library, NULL, (WORD)origFirstThunk->u1.Ordinal, (PVOID*)&(firstThunk->u1.Function));
 				}
 				else {
-					importByName = RVA(PIMAGE_IMPORT_BY_NAME, baseAddress, origFirstThunk->u1.AddressOfData);
+					importByName = RVA(PIMAGE_IMPORT_BY_NAME, pBaseAddress, origFirstThunk->u1.AddressOfData);
 					FILL_STRING(aString, importByName->Name);
 					pLdrGetProcAddress(library, &aString, 0, (PVOID*)&(firstThunk->u1.Function));
 				}
@@ -739,7 +739,7 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 			// change memory access flags
 			pVirtualProtect(
-				(LPVOID)(baseAddress + sectionHeader->VirtualAddress),
+				(LPVOID)(pBaseAddress + sectionHeader->VirtualAddress),
 				sectionHeader->SizeOfRawData,
 				protect, &protect
 			);
@@ -758,11 +758,11 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 	if (dataDir->Size)
 	{
-		tlsDir = RVA(PIMAGE_TLS_DIRECTORY, baseAddress, dataDir->VirtualAddress);
+		tlsDir = RVA(PIMAGE_TLS_DIRECTORY, pBaseAddress, dataDir->VirtualAddress);
 		callback = (PIMAGE_TLS_CALLBACK*)(tlsDir->AddressOfCallBacks);
 
 		for (; *callback; callback++) {
-			(*callback)((LPVOID)baseAddress, DLL_PROCESS_ATTACH, NULL);
+			(*callback)((LPVOID)pBaseAddress, DLL_PROCESS_ATTACH, NULL);
 		}
 	}
 
@@ -775,8 +775,8 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 	if (pRtlAddFunctionTable && dataDir->Size)
 	{
-		rfEntry = RVA(PIMAGE_RUNTIME_FUNCTION_ENTRY, baseAddress, dataDir->VirtualAddress);
-		pRtlAddFunctionTable(rfEntry, (dataDir->Size / sizeof(IMAGE_RUNTIME_FUNCTION_ENTRY)) - 1, baseAddress);
+		rfEntry = RVA(PIMAGE_RUNTIME_FUNCTION_ENTRY, pBaseAddress, dataDir->VirtualAddress);
+		pRtlAddFunctionTable(rfEntry, (dataDir->Size / sizeof(IMAGE_RUNTIME_FUNCTION_ENTRY)) - 1, pBaseAddress);
 	}
 #endif
 
@@ -784,8 +784,8 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 	// STEP 11: call our images entry point
 	///
 
-	dllMain = RVA(DLLMAIN, baseAddress, ntHeaders->OptionalHeader.AddressOfEntryPoint);
-	dllMain((HINSTANCE)baseAddress, DLL_PROCESS_ATTACH, (LPVOID)1);
+	dllMain = RVA(DLLMAIN, pBaseAddress, ntHeaders->OptionalHeader.AddressOfEntryPoint);
+	dllMain((HINSTANCE)pBaseAddress, DLL_PROCESS_ATTACH, (LPVOID)1);
 
 	///
 	// STEP 12: call our exported function
@@ -799,16 +799,16 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 			if (!dataDir->Size)
 				break;
 
-			exportDir = (PIMAGE_EXPORT_DIRECTORY)(baseAddress + dataDir->VirtualAddress);
+			exportDir = (PIMAGE_EXPORT_DIRECTORY)(pBaseAddress + dataDir->VirtualAddress);
 			if (!exportDir->NumberOfNames || !exportDir->NumberOfFunctions)
 				break;
 
-			expName = RVA(PDWORD, baseAddress, exportDir->AddressOfNames);
-			expOrdinal = RVA(PWORD, baseAddress, exportDir->AddressOfNameOrdinals);
+			expName = RVA(PDWORD, pBaseAddress, exportDir->AddressOfNames);
+			expOrdinal = RVA(PWORD, pBaseAddress, exportDir->AddressOfNameOrdinals);
 
 			for (i = 0; i < exportDir->NumberOfNames; i++, expName++, expOrdinal++) {
 
-				expNameStr = RVA(LPCSTR, baseAddress, *expName);
+				expNameStr = RVA(LPCSTR, pBaseAddress, *expName);
 				funcHash = 0;
 
 				if (!expNameStr)
@@ -822,8 +822,8 @@ ULONG_PTR LoadDLL(PBYTE pbCipherText, DWORD dwFunctionHash,
 
 				if (dwFunctionHash == funcHash && expOrdinal)
 				{
-					exportFunc = RVA(EXPORTFUNC, baseAddress, *(PDWORD)(baseAddress + exportDir->AddressOfFunctions + (*expOrdinal * 4)));
-					exportFunc(lpUserData, nUserdataLen);
+					exportFunc = RVA(EXPORTFUNC, pBaseAddress, *(PDWORD)(pBaseAddress + exportDir->AddressOfFunctions + (*expOrdinal * 4)));
+					exportFunc(lpUserData, dwUserdataLen);
 					break;
 				}
 			}
@@ -853,5 +853,5 @@ Cleanup:
 	}
 
 	// Atempt to return a handle to the module
-	return baseAddress;
+	return pBaseAddress;
 }
